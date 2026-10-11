@@ -1,3 +1,5 @@
+"""Scoring metrics on hand-computed cases."""
+
 import numpy as np
 
 from f1sim.core.scoring.metrics import brier, ranked_probability_score

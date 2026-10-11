@@ -1,27 +1,38 @@
+"""The shared HTTP layer: retries, backoff, Retry-After, caching and rate limits."""
+
+from collections.abc import Callable
 from pathlib import Path
 
+import httpx
 import pytest
 
-httpx = pytest.importorskip("httpx")
-
-from f1sim.adapters.sources.http import HttpClient, RateLimiter
+from f1sim.adapters.sources.http import HttpClient, RateLimiter, RetryPolicy
 from f1sim.core.errors import DataError
+
+Handler = Callable[[httpx.Request], httpx.Response]
 
 
 class FakeClock:
+    """A controllable clock whose ``sleep`` advances time instantly and records each call."""
+
     def __init__(self) -> None:
+        """Start at time zero with no sleeps recorded."""
         self.now = 0.0
         self.slept: list[float] = []
 
     def __call__(self) -> float:
+        """Return the current fake time."""
         return self.now
 
     def sleep(self, seconds: float) -> None:
+        """Record the sleep and advance the clock by ``seconds``."""
         self.slept.append(seconds)
         self.now += seconds
 
 
-def _client(handler, tmp_path: Path | None = None, **kw) -> tuple[HttpClient, FakeClock]:  # type: ignore[no-untyped-def]
+def _client(
+    handler: Handler, tmp_path: Path | None = None, retry: RetryPolicy | None = None
+) -> tuple[HttpClient, FakeClock]:
     clock = FakeClock()
     limiter = RateLimiter(
         per_second=100, burst=100, per_hour=10_000, clock=clock, sleep=clock.sleep
@@ -29,10 +40,10 @@ def _client(handler, tmp_path: Path | None = None, **kw) -> tuple[HttpClient, Fa
     client = HttpClient(
         cache_dir=tmp_path,
         limiter=limiter,
+        retry=retry,
         transport=httpx.MockTransport(handler),
         sleep=clock.sleep,
         jitter=lambda: 0.0,
-        **kw,
     )
     return client, clock
 
@@ -40,7 +51,7 @@ def _client(handler, tmp_path: Path | None = None, **kw) -> tuple[HttpClient, Fa
 def test_retries_server_errors_with_exponential_backoff() -> None:
     calls = {"n": 0}
 
-    def handler(request):  # type: ignore[no-untyped-def]
+    def handler(_request: httpx.Request) -> httpx.Response:
         calls["n"] += 1
         return httpx.Response(503) if calls["n"] < 3 else httpx.Response(200, json={"ok": True})
 
@@ -53,20 +64,20 @@ def test_honours_retry_after_on_429() -> None:
     responses = iter(
         [httpx.Response(429, headers={"Retry-After": "7"}), httpx.Response(200, json=[])]
     )
-    client, clock = _client(lambda r: next(responses))  # type: ignore[no-untyped-def]
+    client, clock = _client(lambda _request: next(responses))
     client.get_json("https://example.test/a", cache=False)
     assert clock.slept == [7.0]
 
 
 def test_client_errors_fail_immediately() -> None:
-    client, clock = _client(lambda r: httpx.Response(404))  # type: ignore[no-untyped-def]
+    client, clock = _client(lambda _request: httpx.Response(404))
     with pytest.raises(DataError, match="404"):
         client.get_json("https://example.test/missing", cache=False)
-    assert clock.slept == []
+    assert not clock.slept
 
 
 def test_gives_up_after_max_retries() -> None:
-    client, _ = _client(lambda r: httpx.Response(500), max_retries=2)  # type: ignore[no-untyped-def]
+    client, _ = _client(lambda _request: httpx.Response(500), retry=RetryPolicy(max_retries=2))
     with pytest.raises(DataError, match="3 attempts"):
         client.get_json("https://example.test/a", cache=False)
 
@@ -74,7 +85,7 @@ def test_gives_up_after_max_retries() -> None:
 def test_cache_serves_repeat_requests_without_network(tmp_path: Path) -> None:
     calls = {"n": 0}
 
-    def handler(request):  # type: ignore[no-untyped-def]
+    def handler(_request: httpx.Request) -> httpx.Response:
         calls["n"] += 1
         return httpx.Response(200, json={"v": 1})
 

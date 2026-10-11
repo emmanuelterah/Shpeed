@@ -1,20 +1,22 @@
+"""FastF1 adapter: session listing and conversion of fake FastF1 sessions to canonical tables."""
+
 from datetime import datetime
 
 import pytest
-
-pytest.importorskip("pandera")
 
 from f1sim.adapters.sources.fastf1_adapter import FastF1Adapter
 from f1sim.adapters.store.schemas import validate
 from f1sim.core.domain.entities import EventKey, SessionKey, SessionType
 from f1sim.core.errors import DataError
-from tests.fixtures.fastf1_fakes import fake_session, loaders
+from tests.fixtures.fastf1_fakes import FakeSession, fake_session, loaders
 
 pytestmark = pytest.mark.integration
 RACE = SessionKey(EventKey(2024, 1), SessionType.RACE)
 
 
-def _adapter(sessions, now=datetime(2025, 1, 1)) -> FastF1Adapter:  # type: ignore[no-untyped-def]
+def _adapter(
+    sessions: dict[tuple[int, int, str], FakeSession], now: datetime = datetime(2025, 1, 1)
+) -> FastF1Adapter:
     load_session, load_schedule = loaders(sessions)
     return FastF1Adapter(load_session=load_session, load_schedule=load_schedule, clock=lambda: now)
 
@@ -25,7 +27,7 @@ def test_lists_finished_sessions_only() -> None:
     assert SessionKey(EventKey(2024, 1), SessionType.QUALIFYING) in found
     assert RACE not in found
     assert all(s.event.round == 1 for s in found)
-    assert adapter.sessions(2017) == []
+    assert not adapter.sessions(2017)
 
 
 def test_race_laps_weather_and_track_status_validate() -> None:

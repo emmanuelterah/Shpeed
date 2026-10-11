@@ -1,24 +1,27 @@
 """Fake FastF1 sessions with the same column names and dtypes as fastf1 3.x objects."""
 
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 import numpy as np
 import pandas as pd
+
+from f1sim.adapters.sources.fastf1_adapter import ScheduleLoader, SessionLoader
 
 DRIVERS = [("VER", "max_verstappen", "red_bull"), ("NOR", "norris", "mclaren")]
 
 
 @dataclass
 class FakeSession:
+    """Stands in for a loaded ``fastf1.core.Session`` with the attributes the adapter reads."""
+
     laps: pd.DataFrame
     results: pd.DataFrame
     weather_data: pd.DataFrame
     track_status: pd.DataFrame
     date: pd.Timestamp
     t0_date: pd.Timestamp
-    loads: list[str] = field(default_factory=list[str])
 
 
 def fake_session(
@@ -29,6 +32,7 @@ def fake_session(
     red_flag_lap: int | None = None,
     drop_driver_id: bool = False,
 ) -> FakeSession:
+    """Build a two-driver session with a pit stop, and optionally a safety car or red flag."""
     t0 = pd.Timestamp(start) - pd.Timedelta(minutes=55)
     rows: list[dict[str, Any]] = []
     for code, _, team in DRIVERS:
@@ -146,11 +150,10 @@ def fake_schedule(season: int = 2024) -> pd.DataFrame:
 
 def loaders(
     sessions: dict[tuple[int, int, str], FakeSession], schedule: pd.DataFrame | None = None
-) -> tuple[Any, Any]:
-    calls: list[tuple[int, int, str]] = []
+) -> tuple[SessionLoader, ScheduleLoader]:
+    """Loaders for ``FastF1Adapter`` that serve ``sessions`` and fail like FastF1 otherwise."""
 
     def load_session(season: int, round_: int, identifier: str) -> FakeSession:
-        calls.append((season, round_, identifier))
         if (season, round_, identifier) not in sessions:
             raise RuntimeError("Session data not available")  # mimics fastf1 errors
         return sessions[(season, round_, identifier)]
@@ -158,9 +161,4 @@ def loaders(
     def load_schedule(season: int) -> pd.DataFrame:
         return fake_schedule(season) if schedule is None else schedule
 
-    load_session.calls = calls  # type: ignore[attr-defined]
     return load_session, load_schedule
-
-
-def end_of(start: datetime, hours: float = 3) -> datetime:
-    return start + timedelta(hours=hours)

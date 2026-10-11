@@ -12,6 +12,10 @@ import pandera.pandas as pa
 from f1sim.adapters.store.tables import BOOL, FLOAT, INT, TABLES, TEXT, TS, TableSpec
 from f1sim.core.errors import ValidationError
 
+# pandera's Check constructors are untyped; one Any-typed alias keeps strict pyright happy
+# without a pragma comment on every call.
+_CHECK: Any = pa.Check
+
 _DTYPES: dict[str, Any] = {
     INT: "Int64",
     FLOAT: "float64",
@@ -69,14 +73,14 @@ def _checks(table: str, column: str) -> list[pa.Check]:
     if column in _RANGES:
         bounds = _RANGES[column]
         if "ge" in bounds and "le" in bounds:
-            checks.append(pa.Check.in_range(bounds["ge"], bounds["le"]))  # pyright: ignore[reportUnknownMemberType]
+            checks.append(_CHECK.in_range(bounds["ge"], bounds["le"]))
         elif "gt" in bounds and "le" in bounds:
-            checks.append(pa.Check.in_range(bounds["gt"], bounds["le"], include_min=False))  # pyright: ignore[reportUnknownMemberType]
+            checks.append(_CHECK.in_range(bounds["gt"], bounds["le"], include_min=False))
         elif "ge" in bounds:
-            checks.append(pa.Check.ge(bounds["ge"]))  # pyright: ignore[reportUnknownMemberType]
+            checks.append(_CHECK.ge(bounds["ge"]))
     allowed = _ALLOWED.get(column)
     if allowed and not (table == "results" and column == "status"):
-        checks.append(pa.Check.isin(allowed))  # pyright: ignore[reportUnknownMemberType]
+        checks.append(_CHECK.isin(allowed))
     return checks
 
 
@@ -95,6 +99,14 @@ def _stints_join_up(df: pd.DataFrame) -> bool:
 
 
 def build_schema(spec: TableSpec) -> pa.DataFrameSchema:
+    """Build the pandera schema for one canonical table.
+
+    Args:
+        spec: The table's registry entry.
+
+    Returns:
+        A strict schema that coerces types and checks ranges, nulls and uniqueness.
+    """
     columns = {
         name: pa.Column(
             _DTYPES[kind],
@@ -118,9 +130,17 @@ SCHEMAS: dict[str, pa.DataFrameSchema] = {name: build_schema(s) for name, s in T
 
 
 def validate(table: str, df: pd.DataFrame) -> pd.DataFrame:
-    """Return ``df`` coerced to the canonical types, in canonical column order.
+    """Validate rows for one table and coerce them to the canonical types.
 
-    Raises ``ValidationError`` for an unknown table or any failed check.
+    Args:
+        table: Canonical table name.
+        df: Rows to check; column order does not matter.
+
+    Returns:
+        The rows with canonical dtypes, in canonical column order, with a fresh index.
+
+    Raises:
+        ValidationError: If the table is unknown, columns are missing, or any check fails.
     """
     if table not in SCHEMAS:
         raise ValidationError(f"Unknown table {table!r}; known tables: {sorted(SCHEMAS)}")
@@ -130,7 +150,8 @@ def validate(table: str, df: pd.DataFrame) -> pd.DataFrame:
     try:
         checked = SCHEMAS[table].validate(df.reset_index(drop=True), lazy=True)
     except pa.errors.SchemaErrors as exc:
-        failures = cast(pd.DataFrame, exc.failure_cases)  # pyright: ignore[reportUnknownMemberType]
+        errors: Any = exc
+        failures = cast(pd.DataFrame, errors.failure_cases)
         cases = failures.head(10).to_string(index=False)
         raise ValidationError(f"{table}: {len(failures)} failed checks\n{cases}") from exc
     return checked[list(TABLES[table].columns)].reset_index(drop=True)

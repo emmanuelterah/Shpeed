@@ -1,1 +1,1 @@
-"""Application use cases: they orchestrate ports and never import adapters."""
+"""Application use cases. They orchestrate ports and never import adapters."""

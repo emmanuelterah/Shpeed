@@ -27,8 +27,38 @@ def _pct(flags: list[bool]) -> float | None:
     return round(100 * sum(flags) / len(flags), 1) if flags else None
 
 
+def _session_row(
+    laps: pd.DataFrame, results: pd.DataFrame, weather: pd.DataFrame
+) -> dict[str, object]:
+    """Quality figures for one session, given that session's rows of each table."""
+    first = laps if len(laps) else results
+    driver_ids: list[object] = first["driver_id"].tolist()
+    lap_ids: list[object] = laps["driver_id"].tolist()
+    return {
+        "round": int(first["round"].iloc[0]),
+        "session": str(first["session"].iloc[0]),
+        "drivers": len(set(driver_ids)),
+        "laps": len(laps),
+        "clean_lap_pct": _pct([bool(v) for v in laps["clean_lap"].tolist()]),
+        "missing_lap_time_pct": _pct([bool(v) for v in laps["lap_time_s"].isna().tolist()]),
+        "id_fallbacks": sum(str(d).startswith("code:") for d in lap_ids),
+        "weather_rows": len(weather),
+        "results_rows": len(results),
+    }
+
+
 def session_quality(reader: DataReader, season: int, snapshot: SnapshotId) -> pd.DataFrame:
-    """One row per session: lap counts, clean-lap share, gaps in timing, weather and results."""
+    """Summarise data quality per session.
+
+    Args:
+        reader: Read access to the store.
+        season: Season to summarise.
+        snapshot: Snapshot to read.
+
+    Returns:
+        One row per session: drivers, laps, clean-lap share, missing lap times, driver ID
+        fallbacks, and weather and results row counts.
+    """
     laps = _only(reader.read("laps", snapshot=snapshot, as_of=FAR_FUTURE), season)
     results = _only(reader.read("results", snapshot=snapshot, as_of=FAR_FUTURE), season)
     weather = _only(reader.read("weather", snapshot=snapshot, as_of=FAR_FUTURE), season)
@@ -38,32 +68,28 @@ def session_quality(reader: DataReader, season: int, snapshot: SnapshotId) -> pd
         for r, s in zip(frame["round"].tolist(), frame["session"].tolist(), strict=True):
             keys.add((int(r), str(s)))
 
-    rows: list[dict[str, object]] = []
-    for round_, session in sorted(keys):
-        sl = _only(laps, season, round_, session)
-        sr = _only(results, season, round_, session)
-        sw = _only(weather, season, round_, session)
-        driver_ids: list[object] = (sl if len(sl) else sr)["driver_id"].tolist()
-        lap_ids: list[object] = sl["driver_id"].tolist()
-        clean: list[bool] = [bool(v) for v in sl["clean_lap"].tolist()]
-        missing: list[bool] = [bool(v) for v in sl["lap_time_s"].isna().tolist()]
-        rows.append(
-            {
-                "round": round_,
-                "session": session,
-                "drivers": len(set(driver_ids)),
-                "laps": len(sl),
-                "clean_lap_pct": _pct(clean),
-                "missing_lap_time_pct": _pct(missing),
-                "id_fallbacks": sum(str(d).startswith("code:") for d in lap_ids),
-                "weather_rows": len(sw),
-                "results_rows": len(sr),
-            }
+    rows = [
+        _session_row(
+            _only(laps, season, round_, session),
+            _only(results, season, round_, session),
+            _only(weather, season, round_, session),
         )
+        for round_, session in sorted(keys)
+    ]
     return pd.DataFrame(rows)
 
 
 def render_markdown(df: pd.DataFrame, season: int, snapshot: SnapshotId) -> str:
+    """Render the quality summary as a Markdown report.
+
+    Args:
+        df: Output of ``session_quality``.
+        season: Season shown in the title.
+        snapshot: Snapshot the summary was read from.
+
+    Returns:
+        The report, with a "Needs a look" list of sessions with few clean laps or ID gaps.
+    """
     lines = [
         f"# Data quality: {season} season",
         "",

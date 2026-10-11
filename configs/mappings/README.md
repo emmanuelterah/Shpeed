@@ -17,6 +17,7 @@ without a lookup table. If FastF1 lacks an ID for a driver, the lap is stored wi
 
 ## Team lineage (P1-06)
 
-`team_lineage.yaml` groups constructor IDs that are one team under different names, such as
+The table lives inside the package, at `src/f1sim/resources/team_lineage.yaml`, so it ships
+with the wheel and loads the same way after `pip install f1sim`. It groups constructor IDs that are one team under different names, such as
 `sauber`, `alfa` and `audi`. Models use `TeamLineage.lineage_of(team_id)` to carry history
 across rebrands; the stored data keeps the original constructor ID.

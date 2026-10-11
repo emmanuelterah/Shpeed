@@ -1,4 +1,4 @@
-"""The prediction target (P2-01): a driver x finishing-position probability matrix plus P(DNF)."""
+"""The prediction target (P2-01): a driver-by-position probability matrix plus P(DNF)."""
 
 from dataclasses import dataclass
 
@@ -12,10 +12,16 @@ _TOL = 1e-6
 
 @dataclass(frozen=True)
 class PositionMatrix:
-    """Row ``i`` is driver ``i``; column ``k`` is P(finish in position k+1).
+    """Finishing-position probabilities for every driver in one race.
 
-    Each row plus that driver's P(DNF) sums to 1. Each position column sums to at most 1
-    (a position can go unfilled when cars retire).
+    Row ``i`` is driver ``i``; column ``k`` is the probability of finishing in position
+    ``k + 1``. Each row plus that driver's P(DNF) sums to 1. Each position column sums to
+    at most 1, because a position can go unfilled when cars retire.
+
+    Attributes:
+        drivers: Driver IDs, one per row, unique.
+        p_position: Array of shape ``(n_drivers, n_drivers)``.
+        p_dnf: Array of shape ``(n_drivers,)``: the probability of not finishing.
     """
 
     drivers: tuple[str, ...]
@@ -23,6 +29,12 @@ class PositionMatrix:
     p_dnf: NDArray[np.float64]
 
     def __post_init__(self) -> None:
+        """Check the matrix invariants.
+
+        Raises:
+            InvariantError: If driver IDs repeat, shapes disagree, a probability is negative,
+                a row does not sum to 1, or a position column sums to more than 1.
+        """
         n = len(self.drivers)
         if len(set(self.drivers)) != n:
             raise InvariantError("driver IDs must be unique")
@@ -40,10 +52,18 @@ class PositionMatrix:
     def from_finishing_orders(
         cls, drivers: tuple[str, ...], orders: NDArray[np.int_]
     ) -> "PositionMatrix":
-        """Build from simulated results.
+        """Build a matrix by counting simulated finishing positions.
 
-        ``orders[s, i]`` is driver ``i``'s finishing position (1-based) in simulation ``s``,
-        or 0 if the driver did not finish.
+        Args:
+            drivers: Driver IDs, one per column of ``orders``.
+            orders: Array of shape ``(n_sims, n_drivers)``. ``orders[s, i]`` is driver
+                ``i``'s finishing position (from 1) in simulation ``s``, or 0 for a DNF.
+
+        Returns:
+            The empirical position probabilities across all simulations.
+
+        Raises:
+            InvariantError: If ``orders`` does not have one column per driver.
         """
         n_sims, n = orders.shape
         if n != len(drivers):
@@ -55,8 +75,20 @@ class PositionMatrix:
         return cls(drivers=drivers, p_position=counts / n_sims, p_dnf=p_dnf)
 
     def p_win(self) -> NDArray[np.float64]:
+        """Probability that each driver wins.
+
+        Returns:
+            One probability per driver, in ``drivers`` order.
+        """
         return self.p_position[:, 0]
 
     def p_top(self, k: int) -> NDArray[np.float64]:
-        """P(finish in the top ``k``), e.g. ``k=3`` for a podium, ``k=10`` for points."""
+        """Probability that each driver finishes in the top ``k``.
+
+        Args:
+            k: Number of leading positions, for example 3 for a podium or 10 for points.
+
+        Returns:
+            One probability per driver, in ``drivers`` order.
+        """
         return self.p_position[:, :k].sum(axis=1)

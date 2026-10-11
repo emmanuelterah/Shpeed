@@ -17,16 +17,32 @@ INT, FLOAT, TEXT, BOOL, TS = "INTEGER", "DOUBLE", "VARCHAR", "BOOLEAN", "TIMESTA
 
 @dataclass(frozen=True)
 class TableSpec:
+    """The definition of one canonical table.
+
+    Attributes:
+        name: Table name in the store.
+        columns: Column name to DuckDB type, in canonical order.
+        replace_key: A commit replaces every existing row matching these columns, so
+            re-syncing a session is idempotent.
+        unique: Columns that identify one row; checked inside the transaction before COMMIT.
+        time_filtered: Whether reads filter on ``available_at``; internal tables are not.
+    """
+
     name: str
     columns: dict[str, str]
     replace_key: tuple[str, ...]
-    """A commit replaces all existing rows matching these columns, so re-syncs are idempotent."""
     unique: tuple[str, ...]
-    """Columns that identify one row; checked inside the transaction before COMMIT."""
     time_filtered: bool = True
-    """Whether reads filter on ``available_at`` (internal tables are not filtered)."""
 
     def ddl(self, catalog: str) -> str:
+        """Build the CREATE TABLE statement for this table.
+
+        Args:
+            catalog: Name of the attached catalog, such as ``"lake"``.
+
+        Returns:
+            An idempotent ``CREATE TABLE IF NOT EXISTS`` statement.
+        """
         cols = ", ".join(f"{name} {kind}" for name, kind in self.columns.items())
         return f"CREATE TABLE IF NOT EXISTS {catalog}.{self.name} ({cols})"
 

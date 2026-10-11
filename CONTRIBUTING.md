@@ -23,14 +23,35 @@
 - Every implementation of a port must pass that port's contract tests in `tests/contract/`.
 - Decisions that are hard to reverse get an ADR in `docs/adr/`.
 
+## Code style (checked in CI and pre-commit)
+
+| Rule | What it means | Checked by |
+|---|---|---|
+| PEP 8, with 100-character lines | Every line of code, in every language, is at most 100 characters, including comments, strings and lines with `# type:` or `# noqa` comments | ruff, pylint, `scripts/check_line_length.py` |
+| Imports at the top | All imports sit at the top of the file, grouped standard library, third party, then `f1sim`, sorted. No imports inside functions. Absolute imports only | ruff (`I`, `PLC0415`, `TID`), pylint |
+| Google-style docstrings | Every public module, class, function and method has one. Functions document `Args`, `Returns`, `Raises` and `Yields`. Private names (`_name`) and test functions are exempt; test helpers and fixtures are not | ruff (`D`, Google convention), pylint `docparams` |
+| Pylint 10/10 | `pyproject.toml` configures `src/` and `scripts/`; `tests/pylintrc` adjusts for pytest idioms (fixture parameters, private access) | pylint |
+| Strict typing | pyright strict for `src/` and `scripts/`, the same engine as Pylance; stubs for untyped libraries live in `typings/` | pyright |
+| No blanket suppressions | No `# type: ignore` or file-wide `pylint: disable`. Fix the cause; if a library is untyped, add a stub to `typings/` | review |
+| PyPI-ready packaging | The wheel and sdist build, pass `twine check --strict` and `check-wheel-contents`, and data files ship inside `src/f1sim/resources/` | CI |
+
+Naming follows PEP 8: `snake_case` functions and variables, `CapWords` classes,
+`UPPER_CASE` constants, a leading underscore for anything private to a module.
+
+Editors: the repo's `.vscode/` settings use Pylance, ruff on save and a ruler at 100
+characters, and `.editorconfig` sets the limit for other editors.
+
 ## Local checks
 
 ```bash
 uv run pre-commit install    # once
 uv run ruff check . && uv run ruff format --check .
+uv run pylint src scripts && uv run pylint --rcfile=tests/pylintrc tests
+uv run python scripts/check_line_length.py
 uv run pyright
 uv run lint-imports
 uv run pytest
+uv build && uv run twine check --strict dist/* && uv run check-wheel-contents dist/*.whl
 cd frontend && pnpm lint && pnpm typecheck && pnpm test
 ```
 

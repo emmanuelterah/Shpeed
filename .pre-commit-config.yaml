@@ -1,9 +1,11 @@
 # Hooks run the project's own pinned tools through uv, so versions come from uv.lock.
+#   uv run pre-commit install       # once per clone
+#   uv run pre-commit run --all-files
 repos:
   - repo: local
     hooks:
       - id: ruff-check
-        name: ruff check
+        name: ruff check (lint, imports at top, Google docstrings)
         entry: uv run ruff check --fix
         language: system
         types: [python]
@@ -12,8 +14,20 @@ repos:
         entry: uv run ruff format
         language: system
         types: [python]
+      - id: pylint-src
+        name: pylint (src, scripts)
+        entry: uv run pylint
+        language: system
+        types: [python]
+        files: ^(src|scripts)/
+      - id: pylint-tests
+        name: pylint (tests)
+        entry: uv run pylint --rcfile=tests/pylintrc
+        language: system
+        types: [python]
+        files: ^tests/
       - id: pyright
-        name: pyright
+        name: pyright (the checker behind Pylance)
         entry: uv run pyright
         language: system
         types: [python]
@@ -24,6 +38,11 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
+      - id: line-length
+        name: every line of code within 100 characters
+        entry: python scripts/check_line_length.py
+        language: system
+        types: [text]
       - id: no-large-files
         name: block files over 500 kB
         entry: python scripts/check_large_files.py

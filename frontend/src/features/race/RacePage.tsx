@@ -16,6 +16,11 @@ const views = [
   { value: "points", label: "Points" },
 ] as const;
 const topK: Record<View, number> = { win: 1, podium: 3, points: 10 };
+const listHeader: Record<View, string> = {
+  win: "Chance to win",
+  podium: "Chance to finish on the podium",
+  points: "Chance to score points",
+};
 
 export function RacePage() {
   const [state, setState] = useState<LoadedPrediction | null | undefined>(undefined);
@@ -48,11 +53,17 @@ export function RacePage() {
     );
 
   const { record, isSample } = state;
+  const subtitle = [
+    record.season,
+    `Round ${record.round}`,
+    `${record.n_sims.toLocaleString()} simulations`,
+  ].join(" · ");
+  const cutoff = new Date(record.data_cutoff).toLocaleString();
   return (
     <>
       <LargeTitle
         title={record.event_name ?? `Round ${record.round}`}
-        subtitle={`${record.season} · Round ${record.round} · ${record.n_sims.toLocaleString()} simulations`}
+        subtitle={subtitle}
         accessory={isSample ? <Badge tone="caution">Sample data</Badge> : undefined}
       />
       <div
@@ -70,8 +81,8 @@ export function RacePage() {
         />
       </div>
       <GroupedList
-        header={`Chance to ${view === "win" ? "win" : view === "podium" ? "finish on the podium" : "score points"}`}
-        footer={`Data up to ${new Date(record.data_cutoff).toLocaleString()} · model ${record.model_version}`}
+        header={listHeader[view]}
+        footer={`Data up to ${cutoff} · model ${record.model_version}`}
       >
         {rows.map((d, i) => (
           <ListRow

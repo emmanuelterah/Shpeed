@@ -4,7 +4,9 @@ labels: [bug]
 body:
   - type: textarea
     id: what
-    attributes: { label: What happened, description: Include the command and the run_id from the logs }
+    attributes:
+      label: What happened
+      description: Include the command and the run_id from the logs
     validations: { required: true }
   - type: textarea
     id: expected

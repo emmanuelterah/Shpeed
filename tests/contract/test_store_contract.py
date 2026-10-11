@@ -1,15 +1,12 @@
 """Contract suite every store must pass (Liskov substitution, ACID behaviour)."""
 
 from collections.abc import Iterator
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 import pytest
-
-pytest.importorskip("pandera")
-pytest.importorskip("duckdb")
 
 from f1sim.adapters.store.ducklake_store import DuckLakeStore
 from f1sim.adapters.store.memory_store import InMemoryStore
@@ -23,6 +20,7 @@ LATER = T0 + timedelta(days=7)
 
 @pytest.fixture(params=["memory", "ducklake"])
 def store(request: pytest.FixtureRequest, tmp_path: Path) -> Iterator[Any]:
+    """Each store implementation in turn; every test below runs against both."""
     if request.param == "memory":
         yield InMemoryStore()
     else:
@@ -94,8 +92,6 @@ def test_reads_never_return_rows_available_after_the_cutoff(store: Any) -> None:
 
 
 def test_timezone_aware_cutoffs_are_compared_in_utc(store: Any) -> None:
-    from datetime import UTC
-
     snap = store.commit({"laps": lap_rows(available_at=T0)}, run_id="a")
     aware = datetime(T0.year, T0.month, T0.day, T0.hour, tzinfo=UTC)
     assert len(store.read("laps", snapshot=snap, as_of=aware)) == 10

@@ -8,8 +8,6 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("duckdb")
-
 from f1sim.adapters.store.ducklake_store import DuckLakeStore
 from f1sim.adapters.store.lock import writer_lock
 from f1sim.core.errors import StoreBusyError

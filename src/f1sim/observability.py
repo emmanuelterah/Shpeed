@@ -1,4 +1,4 @@
-"""Structured logging with a run ID on every line (P0-14)."""
+"""Structured JSON logging with a run ID on every line (P0-14)."""
 
 import logging
 import uuid
@@ -7,7 +7,17 @@ import structlog
 
 
 def configure_logging(level: str = "INFO") -> str:
-    """Configure JSON logs and bind a fresh ``run_id``. Returns the run ID."""
+    """Configure structlog for JSON output and bind a fresh run ID to every log line.
+
+    Args:
+        level: Minimum log level name, such as ``"INFO"`` or ``"DEBUG"`` (case-insensitive).
+
+    Returns:
+        The 12-character run ID bound to this process's logs.
+
+    Raises:
+        KeyError: If ``level`` is not a standard logging level name.
+    """
     run_id = uuid.uuid4().hex[:12]
     structlog.configure(
         processors=[

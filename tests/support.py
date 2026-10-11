@@ -18,6 +18,7 @@ def lap_rows(
     available_at: datetime = T0,
     **overrides: Any,
 ) -> pd.DataFrame:
+    """Build valid ``laps`` rows: a pit stop on lap 3, so laps 1, 3 and 4 are not clean."""
     rows: list[dict[str, Any]] = []
     for d in drivers:
         for lap in range(1, n_laps + 1):
@@ -58,6 +59,7 @@ def lap_rows(
 def result_rows(
     *, season: int = 2025, round_: int = 1, session: str = "R", available_at: datetime = T0
 ) -> pd.DataFrame:
+    """Build valid ``results`` rows for a two-driver race."""
     return pd.DataFrame(
         [
             {

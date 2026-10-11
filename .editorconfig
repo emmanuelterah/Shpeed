@@ -7,9 +7,15 @@ insert_final_newline = true
 trim_trailing_whitespace = true
 indent_style = space
 indent_size = 4
+# Every line of code stays within 100 characters (checked by scripts/check_line_length.py)
+max_line_length = 100
 
 [*.{ts,tsx,js,mjs,cjs,json,css,html,yml,yaml,md}]
 indent_size = 2
+
+[*.md]
+# Prose wraps freely; only code files are held to the line limit
+max_line_length = off
 
 [Makefile]
 indent_style = tab

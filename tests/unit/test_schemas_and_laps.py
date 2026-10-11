@@ -1,7 +1,7 @@
+"""Table validation and the clean-lap rule."""
+
 import pandas as pd
 import pytest
-
-pytest.importorskip("pandera")
 
 from f1sim.adapters.store.schemas import validate
 from f1sim.adapters.store.tables import TABLES

@@ -32,6 +32,12 @@ _RESULT_KEYS: dict[SessionType, tuple[str, str]] = {
 
 
 class JolpicaAdapter:
+    """The ``SourceAdapter`` for Jolpica-F1.
+
+    Attributes:
+        name: Source name in the sync ledger.
+    """
+
     name = "jolpica"
 
     def __init__(
@@ -42,6 +48,14 @@ class JolpicaAdapter:
         base_url: str = BASE_URL,
         page_size: int = 100,
     ) -> None:
+        """Create the adapter.
+
+        Args:
+            http: Rate-limited, caching HTTP client.
+            clock: Returns the current naive UTC time; decides which sessions have finished.
+            base_url: API root, overridable for mirrors and tests.
+            page_size: Results per request (Jolpica allows up to 100).
+        """
         self._http = http
         self._clock = clock
         self._base = base_url.rstrip("/")
@@ -50,7 +64,17 @@ class JolpicaAdapter:
 
     # ------------------------------------------------------------------ SourceAdapter
     def sessions(self, season: int) -> Sequence[SessionKey]:
-        """Race, qualifying and sprint sessions of ``season`` that have finished."""
+        """List the race, qualifying and sprint sessions of a season that have finished.
+
+        Args:
+            season: Championship year.
+
+        Returns:
+            Finished sessions, in schedule order.
+
+        Raises:
+            DataError: If the schedule cannot be fetched.
+        """
         now = self._clock()
         found: list[SessionKey] = []
         for race in self._schedule(season):
@@ -62,6 +86,17 @@ class JolpicaAdapter:
         return found
 
     def fetch(self, session: SessionKey) -> Mapping[str, pd.DataFrame]:
+        """Fetch results for one session, plus pit stops and the event row for a race.
+
+        Args:
+            session: A race, qualifying or sprint session.
+
+        Returns:
+            ``results`` for every session; ``pit_stops`` and ``events`` for races too.
+
+        Raises:
+            DataError: If the session is not on the schedule or a request fails.
+        """
         race = self._race(session.event)
         start = _session_start(race, session.session)
         if start is None:

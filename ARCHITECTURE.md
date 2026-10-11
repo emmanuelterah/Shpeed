@@ -88,20 +88,22 @@ Shpeed/
       scoring/         # Brier, RPS, calibration
       usecases/        # sync, backtest, simulate, score, publish
       errors.py
+    resources/         # data shipped in the wheel: team_lineage.yaml
     adapters/
       sources/         # FastF1Adapter, JolpicaAdapter, shared HTTP layer
       store/           # DuckLakeStore, InMemoryStore (tests), pandera schemas, writer lock
       models/          # baselines, pace, tyres, strategy, overtaking, hazards
       steps/           # lap_time, overtake, pit_stop, safety_car, reliability, lap1
       publishers/      # git_pages, local_file (tests)
-    api/               # read-only FastAPI service
+    api/               # read-only FastAPI service and its container health check
     reports/           # backtest reports
     settings.py        # the only module that reads environment variables
     observability.py   # structlog with run_id
     cli.py             # composition root
   frontend/            # React + TypeScript + Vite web app (section 6)
   schemas/             # prediction-record.v1.schema.json, shared by backend and frontend
-  configs/             # rules/<season>.yaml, circuits, mappings
+  configs/             # rules/<season>.yaml, circuits, mapping notes
+  typings/             # type stubs for untyped libraries (fastf1), used by pyright and Pylance
   tests/               # unit, property, contract, integration, perf, fixtures/recorded
   benchmarks/          # recorded backtest scores per model
   predictions/         # published prediction records

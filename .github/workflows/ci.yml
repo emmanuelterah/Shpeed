@@ -19,9 +19,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
       - run: uv sync --all-extras
-      - name: Lint
+      - name: Lint (ruff, including Google docstrings and imports at top)
         run: uv run ruff check . && uv run ruff format --check .
-      - name: Types
+      - name: Pylint (10/10 required)
+        run: |
+          uv run pylint src scripts --fail-under=10
+          uv run pylint --rcfile=tests/pylintrc tests --fail-under=10
+      - name: Line length (every code file, 100 characters)
+        run: uv run python scripts/check_line_length.py
+      - name: Types (pyright strict, as used by Pylance)
         run: uv run pyright
       - name: Import contracts
         run: uv run lint-imports
@@ -29,6 +35,11 @@ jobs:
         run: uv run pytest
       - name: Dependency audit
         run: uv run pip-audit
+      - name: Package builds and passes PyPI checks
+        run: |
+          uv build
+          uv run twine check --strict dist/*
+          uv run check-wheel-contents dist/*.whl
 
   frontend:
     runs-on: ubuntu-latest

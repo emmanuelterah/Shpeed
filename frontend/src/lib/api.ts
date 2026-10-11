@@ -11,7 +11,10 @@ export interface LoadedPrediction {
 const apiUrl = import.meta.env.VITE_API_URL?.replace(/\/$/, "");
 const base = import.meta.env.BASE_URL;
 
-/** Load the latest published prediction. In development, falls back to clearly labelled sample data. */
+/**
+ * Load the latest published prediction.
+ * In development, falls back to clearly labelled sample data.
+ */
 export async function loadLatestPrediction(): Promise<LoadedPrediction | null> {
   try {
     const record = apiUrl

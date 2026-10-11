@@ -2,7 +2,7 @@
 
 A *clean* lap is one whose time reflects a car's real pace: not lap 1, not an in- or
 out-lap, timed accurately, not deleted, and run entirely without a safety car, virtual
-safety car or red flag. Yellow flags are allowed: they are local and short.
+safety car or red flag. Yellow flags are allowed because they are local and short.
 """
 
 import pandas as pd
@@ -13,7 +13,15 @@ NEUTRALISED_STATUS = frozenset("4567")
 
 
 def mark_clean_laps(laps: pd.DataFrame) -> "pd.Series[bool]":
-    """Return a boolean Series, aligned with ``laps``, marking clean laps."""
+    """Flag the laps whose times reflect real pace.
+
+    Args:
+        laps: Canonical ``laps`` rows; needs ``lap_number``, ``pit_in``, ``pit_out``,
+            ``lap_time_s``, ``is_accurate``, ``deleted`` and ``track_status``.
+
+    Returns:
+        A boolean Series aligned with ``laps``, True for clean laps.
+    """
     status = laps["track_status"].fillna("").astype(str)
     neutralised = status.map(lambda s: any(ch in NEUTRALISED_STATUS for ch in s))
     clean = (

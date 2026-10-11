@@ -1,3 +1,5 @@
+"""PositionMatrix construction and invariants."""
+
 import numpy as np
 import pytest
 

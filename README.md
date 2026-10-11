@@ -238,7 +238,8 @@ shpeed/
 │   └── cli.py                  command line; wires adapters into the core
 ├── frontend/                   React + TypeScript web app and design system
 ├── schemas/                    JSON Schema shared by backend and frontend
-├── configs/                    season rules, circuits, ID mappings
+├── configs/                    season rules, circuits, ID mapping notes
+├── typings/                    type stubs for untyped libraries (used by pyright and Pylance)
 ├── tests/                      unit · property · contract · integration · performance
 ├── predictions/                published forecasts, one JSON file per race
 ├── benchmarks/                 recorded backtest scores per model

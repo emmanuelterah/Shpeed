@@ -1,4 +1,7 @@
-"""Domain error hierarchy (P0-15). Catch specific errors; never use a bare ``except``."""
+"""Domain error hierarchy (P0-15).
+
+Code catches these specific errors rather than using a bare ``except``.
+"""
 
 
 class ShpeedError(Exception):
@@ -10,19 +13,19 @@ class DataError(ShpeedError):
 
 
 class ValidationError(DataError):
-    """Data failed a schema or plausibility check; the transaction is rolled back."""
+    """Data failed a schema or plausibility check, so its transaction was rolled back."""
 
 
 class StoreBusyError(ShpeedError):
-    """Another process holds the store's single-writer lock."""
+    """Another process holds the data store's single-writer lock."""
 
 
 class LeakageError(ShpeedError):
-    """A read went past the prediction cutoff. Always a bug."""
+    """A read went past the prediction cutoff. This is always a bug."""
 
 
 class InvariantError(ShpeedError):
-    """A domain invariant was violated (e.g. probabilities do not sum to 1)."""
+    """A domain invariant was violated, for example probabilities that do not sum to 1."""
 
 
 class BudgetExceededError(ShpeedError):

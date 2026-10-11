@@ -3,16 +3,16 @@
 It owns the ``laps``, ``weather`` and ``track_status`` tables. Drivers and teams are keyed
 by the Jolpica/Ergast IDs that FastF1 includes in session results (P1-05).
 
-FastF1 is reached through two injected callables, so tests can supply fake sessions and
-the module imports without the ``data`` extra installed.
+FastF1 is reached through two injected callables (see ``fastf1_loaders``), so tests can
+supply fake sessions without downloading anything.
 """
 
-import importlib
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol
 
+import fastf1
 import pandas as pd
 import structlog
 
@@ -41,14 +41,37 @@ LAP_TIME_RANGE = (40.0, 400.0)
 
 
 class SessionLike(Protocol):
-    """The parts of ``fastf1.core.Session`` this adapter reads."""
+    """The parts of a loaded ``fastf1.core.Session`` this adapter reads."""
 
-    laps: pd.DataFrame | None
-    results: pd.DataFrame | None
-    weather_data: pd.DataFrame | None
-    track_status: pd.DataFrame | None
-    date: Any
-    t0_date: Any
+    @property
+    def laps(self) -> pd.DataFrame | None:
+        """Every lap of the session, one row per driver per lap."""
+        ...
+
+    @property
+    def results(self) -> pd.DataFrame | None:
+        """Classification, including Jolpica ``DriverId`` and ``TeamId``."""
+        ...
+
+    @property
+    def weather_data(self) -> pd.DataFrame | None:
+        """Weather samples, roughly one a minute."""
+        ...
+
+    @property
+    def track_status(self) -> pd.DataFrame | None:
+        """Track status changes (green, yellow, safety car and so on)."""
+        ...
+
+    @property
+    def date(self) -> pd.Timestamp:
+        """Scheduled session start, in UTC."""
+        ...
+
+    @property
+    def t0_date(self) -> pd.Timestamp:
+        """Wall-clock time of FastF1's session time zero, in UTC."""
+        ...
 
 
 SessionLoader = Callable[[int, int, str], SessionLike]
@@ -56,27 +79,35 @@ ScheduleLoader = Callable[[int], pd.DataFrame]
 
 
 def fastf1_loaders(cache_dir: Path) -> tuple[SessionLoader, ScheduleLoader]:
-    """Real loaders backed by the fastf1 package and its on-disk cache."""
+    """Build the real loaders, backed by the fastf1 package and its on-disk cache.
+
+    Args:
+        cache_dir: FastF1's cache directory; created if missing.
+
+    Returns:
+        A session loader and a schedule loader for ``FastF1Adapter``.
+    """
     cache_dir.mkdir(parents=True, exist_ok=True)
+    fastf1.Cache.enable_cache(str(cache_dir))
 
-    def module() -> Any:
-        ff1: Any = importlib.import_module("fastf1")
-        ff1.Cache.enable_cache(str(cache_dir))
-        return ff1
-
-    def load_session(season: int, round_: int, identifier: str) -> SessionLike:
-        session: Any = module().get_session(season, round_, identifier)
+    def _load_session(season: int, round_: int, identifier: str) -> SessionLike:
+        session = fastf1.get_session(season, round_, identifier)
         session.load(laps=True, telemetry=False, weather=True, messages=True)
-        return session  # type: ignore[no-any-return]
+        return session
 
-    def load_schedule(season: int) -> pd.DataFrame:
-        schedule: pd.DataFrame = module().get_event_schedule(season, include_testing=False)
-        return schedule
+    def _load_schedule(season: int) -> pd.DataFrame:
+        return fastf1.get_event_schedule(season, include_testing=False)
 
-    return load_session, load_schedule
+    return _load_session, _load_schedule
 
 
 class FastF1Adapter:
+    """The ``SourceAdapter`` for FastF1.
+
+    Attributes:
+        name: Source name in the sync ledger.
+    """
+
     name = "fastf1"
 
     def __init__(
@@ -86,12 +117,27 @@ class FastF1Adapter:
         load_schedule: ScheduleLoader,
         clock: Callable[[], datetime],
     ) -> None:
+        """Create the adapter.
+
+        Args:
+            load_session: Loads one session by season, round and session code.
+            load_schedule: Loads a season's event schedule.
+            clock: Returns the current naive UTC time; decides which sessions have finished.
+        """
         self._load_session = load_session
         self._load_schedule = load_schedule
         self._clock = clock
 
     # ------------------------------------------------------------------ SourceAdapter
     def sessions(self, season: int) -> Sequence[SessionKey]:
+        """List every finished session of a season on FastF1's schedule.
+
+        Args:
+            season: Championship year; seasons before 2018 have no FastF1 timing data.
+
+        Returns:
+            Finished sessions, in schedule order.
+        """
         if season < FIRST_SEASON:
             return []
         now = self._clock()
@@ -111,11 +157,23 @@ class FastF1Adapter:
         return found
 
     def fetch(self, session: SessionKey) -> Mapping[str, pd.DataFrame]:
+        """Load one session and convert it to canonical tables.
+
+        Args:
+            session: Any session of a weekend.
+
+        Returns:
+            ``laps`` (with the ``clean_lap`` flag), ``weather`` and ``track_status``.
+
+        Raises:
+            DataError: If FastF1 cannot load the session or it has no laps.
+        """
         e = session.event
+        # FastF1 raises many exception types; every one of them means "no usable data"
         try:
             s = self._load_session(e.season, e.round, _IDENTIFIER[session.session])
             laps_raw = s.laps
-        except Exception as exc:  # FastF1 raises many types; all mean "no usable data"
+        except Exception as exc:
             raise DataError(f"FastF1 could not load {session}: {exc}") from exc
         if laps_raw is None or len(laps_raw) == 0:
             raise DataError(f"FastF1 has no laps for {session}")
@@ -150,6 +208,18 @@ def _driver_keys(results: pd.DataFrame | None) -> tuple[dict[str, str], dict[str
     return ids, teams
 
 
+def _lap_times(raw: pd.DataFrame, session: SessionKey) -> tuple["pd.Series[float]", Any]:
+    """Lap times in seconds, and a mask of implausible ones (such as red-flag laps)."""
+    lap_time = _seconds(raw["LapTime"])
+    lo, hi = LAP_TIME_RANGE
+    implausible = lap_time.notna() & ((lap_time < lo) | (lap_time > hi))
+    if implausible.any():
+        log.info(
+            "fastf1.implausible_lap_times_nulled", session=str(session), n=int(implausible.sum())
+        )
+    return lap_time, implausible
+
+
 def _laps(
     raw: pd.DataFrame,
     results: pd.DataFrame | None,
@@ -164,14 +234,7 @@ def _laps(
     if missing:
         log.warning("fastf1.driver_id_fallback", session=str(session), codes=missing)
 
-    lap_time = _seconds(raw["LapTime"])
-    lo, hi = LAP_TIME_RANGE
-    implausible = lap_time.notna() & ((lap_time < lo) | (lap_time > hi))
-    if implausible.any():
-        log.info(
-            "fastf1.implausible_lap_times_nulled", session=str(session), n=int(implausible.sum())
-        )
-
+    lap_time, implausible = _lap_times(raw, session)
     df = pd.DataFrame(
         {
             **base,

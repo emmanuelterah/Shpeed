@@ -1,4 +1,7 @@
-"""Identifiers and core entities (P1-01). Frozen so they are safe to share and hash."""
+"""Identifiers for seasons, events, sessions and data snapshots (P1-01).
+
+The key types are frozen dataclasses, so they are safe to share, compare and use in sets.
+"""
 
 from dataclasses import dataclass
 from enum import StrEnum
@@ -9,6 +12,8 @@ SnapshotId = NewType("SnapshotId", int)
 
 
 class SessionType(StrEnum):
+    """The sessions of a race weekend, valued by their short codes."""
+
     FP1 = "FP1"
     FP2 = "FP2"
     FP3 = "FP3"
@@ -20,7 +25,12 @@ class SessionType(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class EventKey:
-    """One race weekend."""
+    """One race weekend.
+
+    Attributes:
+        season: Championship year, for example 2024.
+        round: Round number within the season, starting at 1.
+    """
 
     season: int
     round: int
@@ -28,7 +38,12 @@ class EventKey:
 
 @dataclass(frozen=True, slots=True)
 class SessionKey:
-    """One session within a race weekend."""
+    """One session within a race weekend.
+
+    Attributes:
+        event: The race weekend.
+        session: Which session of that weekend.
+    """
 
     event: EventKey
     session: SessionType

@@ -4,9 +4,14 @@ labels: [model]
 body:
   - type: textarea
     id: hypothesis
-    attributes: { label: Hypothesis, description: Which race variable does this capture, and why should it improve the backtest? }
+    attributes:
+      label: Hypothesis
+      description: >-
+        Which race variable does this capture, and why should it improve the backtest?
     validations: { required: true }
   - type: textarea
     id: evaluation
-    attributes: { label: How it will be evaluated, description: Seasons, metrics and the ablation you will run }
+    attributes:
+      label: How it will be evaluated
+      description: Seasons, metrics and the ablation you will run
     validations: { required: true }

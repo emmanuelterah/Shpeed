@@ -1,10 +1,9 @@
+"""The read-only prediction API."""
+
 import json
 from pathlib import Path
 
 import pytest
-
-pytest.importorskip("fastapi")
-
 from fastapi.testclient import TestClient
 
 from f1sim.api.app import create_app
@@ -20,6 +19,7 @@ def _write(root: Path, season: int, round_number: int) -> None:
 
 @pytest.fixture
 def client(tmp_path: Path) -> TestClient:
+    """A test client for an API serving an empty predictions folder."""
     return TestClient(create_app(Settings(predictions_dir=tmp_path)))
 
 

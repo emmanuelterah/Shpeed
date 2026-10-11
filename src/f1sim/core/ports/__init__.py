@@ -1,4 +1,4 @@
-"""Interfaces the core owns (dependency inversion). Adapters implement them."""
+"""Interfaces the core owns (dependency inversion); adapters implement them."""
 
 from f1sim.core.ports.lap_step import LapContext, LapStep
 from f1sim.core.ports.predictor import Predictor

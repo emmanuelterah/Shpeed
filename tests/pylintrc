@@ -1,0 +1,44 @@
+# Pylint settings for tests: the same rules as pyproject.toml, adjusted for pytest idioms.
+#   uv run pylint --rcfile=tests/pylintrc tests
+
+[MAIN]
+py-version = 3.12
+jobs = 0
+load-plugins = pylint.extensions.docparams,pylint.extensions.docstyle
+
+[FORMAT]
+max-line-length = 100
+ignore-long-lines = ^$
+
+[BASIC]
+good-names = i,j,k,n,df,e,s,t,r,p,f,_
+# Test functions are documented by their names; fixtures and helpers still need docstrings
+no-docstring-rgx = ^(_|test_)
+
+[DESIGN]
+max-args = 7
+max-positional-arguments = 5
+max-attributes = 10
+max-locals = 20
+min-public-methods = 0
+
+[PARAMETER_DOCUMENTATION]
+default-docstring-type = google
+# Helpers say what they build; listing every argument of a test helper adds noise
+accept-no-param-doc = yes
+accept-no-raise-doc = yes
+accept-no-return-doc = yes
+accept-no-yields-doc = yes
+
+[MESSAGES CONTROL]
+disable =
+    # pytest injects fixtures by parameter name, which pylint reads as shadowing
+    redefined-outer-name,
+    # Tests reach into private members on purpose to simulate failures
+    protected-access,
+    # Duplicates of checks ruff or pyright already make
+    wrong-import-order,
+    ungrouped-imports,
+    unused-import,
+    import-error,
+    no-name-in-module,

@@ -18,7 +18,8 @@ RUN uv sync --frozen --extra api
 ENV PATH="/app/.venv/bin:$PATH" PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
     F1SIM_PREDICTIONS_DIR=/app/predictions
 EXPOSE 8000
-CMD ["uvicorn", "f1sim.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/src"]
+CMD ["uvicorn", "f1sim.api.app:app", "--host", "0.0.0.0", "--port", "8000", \
+     "--reload", "--reload-dir", "/app/src"]
 
 FROM python:3.12-slim AS runtime
 RUN useradd --create-home --uid 10001 shpeed
@@ -30,5 +31,6 @@ ENV PATH="/app/.venv/bin:$PATH" PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
 USER shpeed
 EXPOSE 8000
 HEALTHCHECK --interval=15s --timeout=3s --start-period=5s --retries=3 \
-  CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
-CMD ["uvicorn", "f1sim.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]
+  CMD ["python", "-m", "f1sim.api.healthcheck"]
+CMD ["uvicorn", "f1sim.api.app:app", "--host", "0.0.0.0", "--port", "8000", \
+     "--proxy-headers", "--forwarded-allow-ips", "*"]

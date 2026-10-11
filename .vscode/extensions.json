@@ -1,3 +1,11 @@
 {
-  "recommendations": ["charliermarsh.ruff", "ms-python.python", "ms-pyright.pyright", "dbaeumer.vscode-eslint", "esbenp.prettier-vscode"]
+  "recommendations": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-python.pylint",
+    "charliermarsh.ruff",
+    "editorconfig.editorconfig",
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode"
+  ]
 }

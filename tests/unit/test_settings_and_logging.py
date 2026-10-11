@@ -1,3 +1,5 @@
+"""Settings loading and structured-logging setup."""
+
 from f1sim.observability import configure_logging
 from f1sim.settings import Settings
 

@@ -5,11 +5,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
-pytest.importorskip("duckdb")
-pytest.importorskip("pandera")
-pytest.importorskip("httpx")
-
 from typer.testing import CliRunner
 
 from f1sim import cli
@@ -21,6 +16,7 @@ from f1sim.adapters.store.memory_store import InMemoryStore
 from f1sim.core.domain.entities import EventKey, SessionKey, SessionType
 from f1sim.core.usecases.sync import sync_season
 from f1sim.reports.data_quality import render_markdown, session_quality
+from f1sim.settings import Settings
 from tests.fixtures.fastf1_fakes import fake_session, loaders
 from tests.fixtures.jolpica_transport import jolpica_transport
 
@@ -87,7 +83,7 @@ def test_second_sync_is_incremental_and_creates_no_snapshot() -> None:
     again = sync_season(2024, sources=_sources(), writer=store, ledger=store, run_id="b", now=NOW)
     assert first.committed
     assert not again.committed
-    assert again.fetched == []
+    assert not again.fetched
     assert again.skipped == len(first.fetched)
     assert store.latest_snapshot() == first.snapshot_id
 
@@ -144,8 +140,6 @@ def test_unknown_source_is_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 
 
 def test_composition_root_builds_both_sources_without_network(tmp_path: Path) -> None:
-    from f1sim.settings import Settings
-
     settings = Settings(data_dir=tmp_path / "data", cache_dir=tmp_path / "cache")
     built = cli.build_sources(settings, ("jolpica", "fastf1"))
     assert [s.name for s in built] == ["jolpica", "fastf1"]

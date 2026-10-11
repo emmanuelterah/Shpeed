@@ -11,14 +11,13 @@ One local DuckDB-file catalog over Parquet data files:
   ``verify()`` checks that every file the catalog references is present.
 """
 
-import importlib
 import json
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from importlib.util import find_spec
 from pathlib import Path
-from typing import Any
 
 import duckdb
 import pandas as pd
@@ -37,31 +36,50 @@ _SYNC_RUNS = (
 )
 
 
+BUNDLED_EXTENSION_PACKAGE = "duckdb_extension_ducklake"
+
+
 @dataclass(frozen=True)
 class VerifyReport:
+    """The result of checking the store's data files.
+
+    Attributes:
+        files_checked: Data files the catalog references.
+        missing: Paths that are missing or empty.
+    """
+
     files_checked: int
     missing: list[str] = field(default_factory=list[str])
 
     @property
     def ok(self) -> bool:
+        """Whether every referenced file is present."""
         return not self.missing
 
 
 def load_ducklake(con: duckdb.DuckDBPyConnection) -> None:
-    """Load the DuckLake extension: already installed, bundled wheel, or official repository."""
+    """Load the DuckLake extension into a connection.
+
+    Tries, in order: an already-installed extension; the signed binary bundled in the
+    ``duckdb-extension-ducklake`` wheel (a dev dependency, so tests run offline); and
+    finally ``INSTALL ducklake`` from DuckDB's official repository.
+
+    Args:
+        con: The DuckDB connection to load it into.
+    """
     try:
         con.execute("LOAD ducklake")
         return
     except duckdb.Error:
         pass
-    try:
-        bundled: Any = importlib.import_module("duckdb_extension_ducklake")
-        files = sorted(Path(bundled.__file__).parent.glob("extensions/*/ducklake.duckdb_extension"))
+    # find_spec locates the bundled wheel's files without importing it
+    spec = find_spec(BUNDLED_EXTENSION_PACKAGE)
+    if spec is not None and spec.origin is not None:
+        pattern = "extensions/*/ducklake.duckdb_extension"
+        files = sorted(Path(spec.origin).parent.glob(pattern))
         if files:
             con.execute(f"LOAD '{_sql_str(str(files[-1]))}'")
             return
-    except ImportError:
-        pass
     con.execute("INSTALL ducklake")
     con.execute("LOAD ducklake")
 
@@ -71,9 +89,14 @@ def _sql_str(value: str) -> str:
 
 
 class DuckLakeStore:
-    """Implements ``DataWriter``, ``DataReader`` and ``SyncLedger``."""
+    """The transactional data store: a ``DataWriter``, ``DataReader`` and ``SyncLedger``."""
 
     def __init__(self, root: Path) -> None:
+        """Open, or create, the store under ``root``.
+
+        Args:
+            root: Directory for ``catalog.ducklake`` and the Parquet ``files/``.
+        """
         self._root = root
         root.mkdir(parents=True, exist_ok=True)
         (root / "files").mkdir(exist_ok=True)
@@ -110,6 +133,20 @@ class DuckLakeStore:
 
     # ------------------------------------------------------------------ DataWriter
     def commit(self, tables: Mapping[str, pd.DataFrame], *, run_id: str) -> SnapshotId:
+        """Validate every table, then write them all in one transaction.
+
+        Args:
+            tables: Canonical tables keyed by table name.
+            run_id: ID of the run making the commit, recorded in ``_sync_runs``.
+
+        Returns:
+            The snapshot the commit created.
+
+        Raises:
+            ValidationError: If a table fails validation or would hold duplicate rows;
+                nothing is written.
+            StoreBusyError: If another process holds the writer lock.
+        """
         checked = {name: validate(name, df) for name, df in tables.items()}
         with writer_lock(self._root), self._transaction():
             for name, df in checked.items():
@@ -151,10 +188,29 @@ class DuckLakeStore:
 
     # ------------------------------------------------------------------ DataReader
     def latest_snapshot(self) -> SnapshotId:
+        """Find the newest committed snapshot.
+
+        Returns:
+            Its ID.
+        """
         row = self._con.execute(f"SELECT max(snapshot_id) FROM {CATALOG}.snapshots()").fetchone()
         return SnapshotId(int(row[0]) if row and row[0] is not None else 0)
 
     def read(self, table: str, *, snapshot: SnapshotId, as_of: datetime) -> pd.DataFrame:
+        """Read one table as it was in a snapshot, up to a cutoff.
+
+        Args:
+            table: Canonical table name.
+            snapshot: Snapshot to read; one that does not exist reads as empty.
+            as_of: Cutoff; only rows with ``available_at`` at or before it are returned.
+                Timezone-aware values are compared in UTC.
+
+        Returns:
+            The matching rows, sorted by the table's unique key.
+
+        Raises:
+            DataError: If ``table`` is unknown or internal.
+        """
         if table not in DATA_TABLES:
             raise DataError(f"Unknown or internal table {table!r}; readable: {list(DATA_TABLES)}")
         spec = TABLES[table]
@@ -174,6 +230,14 @@ class DuckLakeStore:
 
     # ------------------------------------------------------------------ SyncLedger
     def ingested_sessions(self, source: str) -> frozenset[SessionKey]:
+        """List the sessions a source has already stored.
+
+        Args:
+            source: Source name.
+
+        Returns:
+            Every session that source has committed.
+        """
         rows = self._con.execute(
             f"SELECT season, round, session FROM {CATALOG}._ingested WHERE source = ?", [source]
         ).fetchall()
@@ -183,7 +247,11 @@ class DuckLakeStore:
 
     # ------------------------------------------------------------------ maintenance
     def verify(self) -> VerifyReport:
-        """Check every data file the catalog references exists and is non-empty (P1-14)."""
+        """Check that every data file the catalog references exists and is non-empty (P1-14).
+
+        Returns:
+            How many files were checked, and which are missing.
+        """
         missing: list[str] = []
         checked = 0
         for name in TABLES:
@@ -199,11 +267,20 @@ class DuckLakeStore:
     def expire_snapshots(
         self, *, keep_last: int, protect: frozenset[SnapshotId] = frozenset()
     ) -> list[SnapshotId]:
-        """Expire old snapshots and delete files only they used (P1-19).
+        """Expire old snapshots and delete the files only they used (P1-19).
 
-        Keeps the newest ``keep_last`` snapshots, the initial table-creation snapshots,
-        and every snapshot in ``protect`` (those cited by published predictions or
-        benchmarks). Returns the expired snapshot IDs.
+        The initial table-creation snapshots are never expired.
+
+        Args:
+            keep_last: How many of the newest data snapshots to keep.
+            protect: Snapshots to keep regardless, such as those cited by published
+                predictions or benchmarks.
+
+        Returns:
+            The expired snapshot IDs, oldest first.
+
+        Raises:
+            StoreBusyError: If another process holds the writer lock.
         """
         ids = [
             int(r[0])
@@ -235,6 +312,14 @@ class DuckLakeStore:
         return first_data - 1
 
     def row_counts(self, *, snapshot: SnapshotId | None = None) -> dict[str, int]:
+        """Count the rows in every table.
+
+        Args:
+            snapshot: Snapshot to count; None means the latest.
+
+        Returns:
+            Row count per table name.
+        """
         version = int(snapshot if snapshot is not None else self.latest_snapshot())
         counts: dict[str, int] = {}
         for name in TABLES:
@@ -245,4 +330,5 @@ class DuckLakeStore:
         return counts
 
     def close(self) -> None:
+        """Close the DuckDB connection."""
         self._con.close()

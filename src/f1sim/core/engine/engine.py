@@ -1,4 +1,4 @@
-"""Runs N races lap by lap through an ordered pipeline of LapSteps (P5-02)."""
+"""Runs many races in parallel, lap by lap, through an ordered pipeline of LapSteps (P5-02)."""
 
 from collections.abc import Sequence
 
@@ -14,6 +14,15 @@ def run_race(
     """Advance ``state`` to the chequered flag.
 
     Adding a mechanic means adding a step, not editing this function.
+
+    Args:
+        state: Starting state; it is mutated in place.
+        steps: Mechanics to apply each lap, in order.
+        ctx: Facts about the race, including its length.
+        rng: Seeded random generator passed to every step.
+
+    Returns:
+        The same ``state`` object, at the end of the race.
     """
     while state.lap < ctx.total_laps:
         state.lap += 1

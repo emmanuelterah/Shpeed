@@ -1,4 +1,5 @@
-# Builds the frontend with the committed prediction records and deploys to GitHub Pages (P8-09, P8-14).
+# Builds the frontend with the committed prediction records and deploys it to GitHub Pages
+# (P8-09, P8-14).
 name: Pages
 
 on:

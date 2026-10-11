@@ -1,3 +1,5 @@
+"""Property tests: any simulated result yields a valid PositionMatrix."""
+
 import numpy as np
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -7,6 +9,7 @@ from f1sim.core.domain import PositionMatrix
 
 @st.composite
 def finishing_orders(draw: st.DrawFn) -> np.ndarray:
+    """Random finishing orders for 2-22 drivers over 1-50 simulations, about 10% DNFs."""
     n = draw(st.integers(min_value=2, max_value=22))
     sims = draw(st.integers(min_value=1, max_value=50))
     seed = draw(st.integers(min_value=0, max_value=2**32 - 1))

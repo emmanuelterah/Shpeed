@@ -36,6 +36,15 @@ def _page(data: dict[str, Any], limit: int, offset: int) -> dict[str, Any]:
 
 
 def jolpica_transport(requests: list[str] | None = None) -> httpx.MockTransport:
+    """An httpx transport that serves recorded Jolpica responses, paginated like the API.
+
+    Args:
+        requests: If given, each request is appended as ``"<path>@<offset>"``.
+
+    Returns:
+        A transport for ``HttpClient``; unknown paths return 404.
+    """
+
     def handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path.split("/ergast/f1/", 1)[1].removesuffix(".json")
         limit = int(request.url.params.get("limit", "30"))

@@ -1,3 +1,5 @@
+"""Team lineage: rebrands resolve to one team."""
+
 import pytest
 
 from f1sim.adapters.config_files import load_team_lineage

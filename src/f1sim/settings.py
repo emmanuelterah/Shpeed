@@ -1,4 +1,8 @@
-"""Typed settings (P0-13). The only module that reads environment variables."""
+"""Typed runtime settings (P0-13).
+
+This is the only module that reads environment variables. Every setting can be overridden
+with an ``F1SIM_``-prefixed variable or a ``.env`` file, for example ``F1SIM_DATA_DIR=/data``.
+"""
 
 from pathlib import Path
 
@@ -6,7 +10,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Runtime configuration, overridable with ``F1SIM_*`` environment variables or ``.env``."""
+    """Runtime configuration for the CLI, the API and scheduled runs.
+
+    Attributes:
+        data_dir: Root of the local data store (``<data_dir>/lake`` holds DuckLake).
+        cache_dir: HTTP and FastF1 caches.
+        log_level: Minimum level written to the JSON logs.
+        seed: Default random seed for simulations.
+        n_sims: Monte Carlo runs per race.
+        sim_time_budget_s: Time budget for one race simulation, in seconds.
+        predictions_dir: Where published prediction records are read and written.
+        cors_origins: Browser origins allowed to call the API directly.
+    """
 
     model_config = SettingsConfigDict(env_prefix="F1SIM_", env_file=".env", extra="ignore")
 
@@ -18,4 +33,3 @@ class Settings(BaseSettings):
     sim_time_budget_s: float = 60.0
     predictions_dir: Path = Path("predictions")
     cors_origins: list[str] = []
-    """Origins allowed to call the API from a browser, e.g. ``["http://localhost:5173"]``."""

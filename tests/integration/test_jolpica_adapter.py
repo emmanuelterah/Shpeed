@@ -1,9 +1,8 @@
+"""Jolpica-F1 adapter, run against recorded responses served with real pagination."""
+
 from datetime import datetime
 
 import pytest
-
-pytest.importorskip("httpx")
-pytest.importorskip("pandera")
 
 from f1sim.adapters.sources.http import HttpClient, RateLimiter
 from f1sim.adapters.sources.jolpica_adapter import JolpicaAdapter
