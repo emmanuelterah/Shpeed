@@ -1,0 +1,12 @@
+name: Feature request
+description: Propose a feature for the roadmap
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes: { label: Problem it solves }
+    validations: { required: true }
+  - type: textarea
+    id: done_when
+    attributes: { label: Done when, description: A test someone else could check }
+    validations: { required: true }

@@ -1,0 +1,19 @@
+# Tag vX.Y.Z to build and publish to PyPI with trusted publishing (P0-16, P9-04).
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+jobs:
+  pypi:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv build
+      - uses: pypa/gh-action-pypi-publish@release/v1

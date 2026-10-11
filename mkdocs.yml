@@ -1,0 +1,11 @@
+# Docs site (roadmap P9-01). Build with: uv run --with mkdocs-material mkdocs serve
+site_name: Shpeed
+repo_url: https://github.com/OWNER/shpeed
+theme:
+  name: material
+nav:
+  - Home: index.md
+  - Architecture: architecture/index.md
+  - Guides:
+      - Add a component: guides/adding-a-component.md
+  - Decisions: adr/index.md

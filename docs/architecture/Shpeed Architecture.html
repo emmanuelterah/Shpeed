@@ -1,0 +1,700 @@
+<title>Shpeed Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: single reading column (~72ch) with full-bleed diagram panels that scroll sideways on phones */
+:root{
+  --paper:#F2F4F6; --panel:#FFFFFF; --ink:#15202B; --muted:#5A6774; --line:#C5CED7;
+  --accent:#1E5AA8; --accent-soft:#E2EBF6; --gate:#C2341F; --gate-soft:#F8E5E1; --line-soft:#E3E8ED;
+  --f-display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#0E141A; --panel:#16202A; --ink:#E3E9EF; --muted:#94A2AF; --line:#34414E;
+  --accent:#72A9EC; --accent-soft:#1B2A3C; --gate:#F0705B; --gate-soft:#3A1F1B; --line-soft:#24303B; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#0E141A; --panel:#16202A; --ink:#E3E9EF; --muted:#94A2AF; --line:#34414E;
+  --accent:#72A9EC; --accent-soft:#1B2A3C; --gate:#F0705B; --gate-soft:#3A1F1B; --line-soft:#24303B; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.6;padding-inline:20px;padding-block:40px 64px}
+.wrap{max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:56px}
+.col{max-width:72ch}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;letter-spacing:.01em}
+h1{font-size:clamp(2.4rem,6vw,3.6rem);line-height:1;font-weight:700;text-transform:uppercase}
+h2{font-size:1.75rem;font-weight:600;text-transform:uppercase;line-height:1.1}
+h3{font-size:1.15rem;font-weight:600}
+p{margin:0}
+.eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+header{display:flex;flex-direction:column;gap:14px}
+header .lede{font-size:1.05rem;color:var(--ink);max-width:68ch}
+section{display:flex;flex-direction:column;gap:16px}
+.legend{display:flex;flex-wrap:wrap;gap:8px 22px;font-size:13px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:8px}
+.sw{display:inline-block;width:26px;height:0;border-top:2px solid var(--muted)}
+.sw.gate{border-top:2px dashed var(--gate)}
+.sw.opt{border-top:1.5px dashed var(--muted)}
+.chip{font-family:var(--f-mono);font-size:11px;color:var(--accent);background:var(--accent-soft);padding:1px 6px;border-radius:3px}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;overflow-x:auto}
+.panel svg{display:block;width:100%;min-width:1000px;height:auto}
+figure{margin:0;display:flex;flex-direction:column;gap:10px}
+figcaption{font-size:13.5px;color:var(--muted);max-width:90ch}
+
+/* SVG styling */
+.bx{fill:var(--panel);stroke:var(--line);stroke-width:1.2}
+.bx.key{stroke:var(--ink);stroke-width:1.4}
+.bx.opt{stroke-dasharray:4 3}
+.bx.step{fill:var(--accent-soft);stroke:none}
+.bx.out{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.4}
+.frame{fill:none;stroke:var(--line);stroke-width:1}
+.region{fill:none;stroke:var(--muted);stroke-width:1;stroke-dasharray:2 4}
+.tt{font-family:var(--f-display);font-weight:600;font-size:15px;fill:var(--ink)}
+.ts{font-family:var(--f-body);font-size:11.5px;fill:var(--muted)}
+.tm{font-family:var(--f-mono);font-size:10.5px;fill:var(--muted)}
+.tstep{font-family:var(--f-body);font-size:11.5px;fill:var(--ink)}
+.hd{font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;fill:var(--muted)}
+.ph{font-family:var(--f-mono);font-size:10px;font-weight:500;fill:var(--accent)}
+.el{font-family:var(--f-mono);font-size:10px;fill:var(--muted)}
+.edge{fill:none;stroke:var(--muted);stroke-width:1.3}
+.edge.acc{stroke:var(--accent);stroke-width:1.6}
+.ah{fill:var(--muted)}
+.ah.acc{fill:var(--accent)}
+.gline{stroke:var(--gate);stroke-width:1.6;stroke-dasharray:6 4;fill:none}
+.gl{font-family:var(--f-mono);font-size:10px;letter-spacing:.08em;fill:var(--gate);font-weight:500}
+.pill{fill:var(--panel);stroke:var(--ink);stroke-width:1.3}
+.pill.cut{fill:var(--gate-soft);stroke:var(--gate)}
+
+/* table */
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:14px}
+th,td{text-align:left;vertical-align:top;padding:10px 14px;border-bottom:1px solid var(--line)}
+th{font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500}
+tr:last-child td{border-bottom:none}
+td:first-child{font-weight:600;white-space:nowrap}
+td.muted{color:var(--muted)}
+
+.decisions{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.decisions article{background:var(--panel);padding:18px 20px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.decisions .n{font-family:var(--f-mono);font-size:11px;color:var(--accent)}
+
+.split{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:28px;align-items:start}
+.split > *{min-width:0}
+pre{margin:0;font-family:var(--f-mono);font-size:12.5px;line-height:1.55;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px 18px;overflow-x:auto;color:var(--ink)}
+pre .c{color:var(--muted)}
+ul.plain{margin:0;padding-left:1.1em;display:flex;flex-direction:column;gap:8px}
+.stack{display:flex;flex-wrap:wrap;gap:6px}
+.stack span{font-family:var(--f-mono);font-size:12px;border:1px solid var(--line);background:var(--panel);padding:3px 9px;border-radius:3px}
+code{font-family:var(--f-mono);font-size:.9em}
+.legend a{color:var(--accent);font-size:13px;text-decoration:none;border-bottom:1px solid var(--accent-soft)}
+.legend a:hover{border-bottom-color:var(--accent)}
+footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:18px}
+</style>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Shpeed · f1sim · system architecture · draft 2 · 11 Oct 2026</div>
+  <h1>Shpeed Architecture</h1>
+  <p class="lede">An open-source F1 race simulator that fetches public timing data, fits Bayesian models of pace, tyres, strategy and race events, simulates each race lap by lap thousands of times, and publishes a probability for every driver finishing in every position. This page lays out how the parts fit, where the two hard boundaries sit, and what runs over a race weekend.</p>
+  <div class="legend">
+    <span><i class="sw"></i>data or control flow</span>
+    <span><i class="sw gate"></i>hard boundary (cutoff, publishing)</span>
+    <span><i class="sw opt"></i>optional / to evaluate</span>
+    <span><span class="chip">P3</span>build phase from the plan</span>
+  </div>
+  <nav class="legend" aria-label="Sections"><a href="#solid">SOLID</a><a href="#acid">ACID</a><a href="#practices">Engineering practices</a></nav>
+</header>
+
+<section>
+  <div class="col"><h2>System overview</h2></div>
+  <figure>
+    <div class="panel">
+<svg viewBox="0 0 1240 790" role="img" aria-label="Shpeed system architecture: public sources feed a local ingestion pipeline and Parquet store; models read only data before the qualifying cutoff and pass posterior draws to a Monte Carlo engine, whose probability matrix is either scored by the backtester or published as a prediction record.">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+    <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah acc" d="M0,0 L10,5 L0,10 z"/></marker>
+  </defs>
+
+  <!-- column headers -->
+  <text class="hd" x="20" y="34">SOURCES</text>
+  <text class="hd" x="250" y="34">f1sim.data</text>
+  <text class="hd" x="500" y="34">LOCAL STORE</text>
+  <text class="hd" x="724" y="34">f1sim.models</text>
+  <text class="hd" x="990" y="34">f1sim.sim</text>
+
+  <!-- local-only region -->
+  <rect class="region" x="236" y="46" width="448" height="380" rx="6"/>
+  <text class="tm" x="250" y="417">LOCAL ONLY · raw data fetched by code, never committed or published</text>
+
+  <!-- sources -->
+  <rect class="bx" x="20" y="56" width="170" height="64" rx="4"/>
+  <text class="tt" x="32" y="76">FastF1</text><text class="ph" x="178" y="75" text-anchor="end">2018→</text>
+  <text class="ts" x="32" y="94">laps · telemetry · weather</text>
+  <text class="ts" x="32" y="109">track status · race control</text>
+
+  <rect class="bx" x="20" y="132" width="170" height="64" rx="4"/>
+  <text class="tt" x="32" y="152">Jolpica-F1</text><text class="ph" x="178" y="151" text-anchor="end">1950→</text>
+  <text class="ts" x="32" y="170">results · grids · pit stops</text>
+  <text class="ts" x="32" y="185">finishing status · standings</text>
+
+  <rect class="bx opt" x="20" y="208" width="170" height="64" rx="4"/>
+  <text class="tt" x="32" y="228">OpenF1</text>
+  <text class="ts" x="32" y="246">live timing · intervals</text>
+  <text class="ts" x="32" y="261">second source, to evaluate</text>
+
+  <rect class="bx" x="20" y="284" width="170" height="64" rx="4"/>
+  <text class="tt" x="32" y="304">Rain forecast</text>
+  <text class="ts" x="32" y="322">probability at cutoff time</text>
+  <text class="ts" x="32" y="337">sets dry / wet sim mix</text>
+
+  <path class="edge" d="M190,88 H250" marker-end="url(#a)"/>
+  <path class="edge" d="M190,164 L250,140" marker-end="url(#a)"/>
+  <path class="edge" d="M190,240 L250,178" marker-end="url(#a)" stroke-dasharray="4 3"/>
+  <path class="edge" d="M190,316 L250,198" marker-end="url(#a)"/>
+
+  <!-- ingestion -->
+  <rect class="bx key" x="250" y="56" width="200" height="150" rx="4"/>
+  <text class="tt" x="262" y="76">Fetch &amp; sync</text><text class="ph" x="438" y="75" text-anchor="end">P1</text>
+  <text class="ts" x="262" y="96">FastF1 cache layer</text>
+  <text class="ts" x="262" y="113">retry with backoff</text>
+  <text class="ts" x="262" y="130">incremental: skips stored</text>
+  <text class="ts" x="262" y="147">recorded fixtures in CI</text>
+  <text class="ts" x="262" y="164">rate-limit aware</text>
+  <text class="tm" x="262" y="190">f1sim data sync</text>
+
+  <path class="edge" d="M350,206 V236" marker-end="url(#a)"/>
+  <rect class="bx" x="250" y="236" width="200" height="62" rx="4"/>
+  <text class="tt" x="262" y="256">Canonicalise</text><text class="ph" x="438" y="255" text-anchor="end">P1</text>
+  <text class="ts" x="262" y="274">driver · team · event keys</text>
+  <text class="ts" x="262" y="289">team lineage (Sauber → Audi)</text>
+
+  <path class="edge" d="M350,298 V328" marker-end="url(#a)"/>
+  <rect class="bx" x="250" y="328" width="200" height="62" rx="4"/>
+  <text class="tt" x="262" y="348">Validate</text><text class="ph" x="438" y="347" text-anchor="end">P1</text>
+  <text class="ts" x="262" y="366">pandera schema checks</text>
+  <text class="ts" x="262" y="381">clean_lap flag (no SC, in/out)</text>
+
+  <path class="edge" d="M450,359 H478 V131 H500" marker-end="url(#a)"/>
+  <text class="el" transform="translate(472,262) rotate(-90)" text-anchor="middle">writes</text>
+
+  <!-- store -->
+  <rect class="bx key" x="500" y="56" width="170" height="150" rx="4"/>
+  <path d="M500,66 H670" stroke="var(--line)" stroke-width="1"/>
+  <text class="tt" x="512" y="88">DuckLake store</text><text class="ph" x="658" y="87" text-anchor="end">P1</text>
+  <text class="ts" x="512" y="108">immutable Parquet files</text>
+  <text class="ts" x="512" y="123">+ SQL snapshot catalog</text>
+  <text class="ts" x="512" y="146">one txn per sync (ACID)</text>
+  <text class="ts" x="512" y="163">reads pinned to a snapshot</text>
+
+  <rect class="bx" x="500" y="236" width="170" height="62" rx="4"/>
+  <text class="tt" x="512" y="256">Fitted-state cache</text>
+  <text class="ts" x="512" y="274">posteriors · curves</text>
+  <text class="ts" x="512" y="289">hazards, per round</text>
+
+  <rect class="bx" x="500" y="328" width="170" height="62" rx="4"/>
+  <text class="tt" x="512" y="348">configs/</text>
+  <text class="tm" x="512" y="366">rules/2026.yaml</text>
+  <text class="ts" x="512" y="381">circuits · clusters</text>
+
+  <!-- cutoff gate -->
+  <line class="gline" x1="700" y1="46" x2="700" y2="466"/>
+  <text class="gl" transform="translate(694,185) rotate(-90)" text-anchor="middle">CUTOFF: AFTER QUALI</text>
+
+  <path class="edge" d="M670,104 H714" marker-end="url(#a)"/>
+  <text class="el" x="684" y="98" text-anchor="middle">@snap</text>
+  <path class="edge" d="M670,267 H714" marker-start="url(#a)" marker-end="url(#a)"/>
+  <text class="el" x="684" y="261" text-anchor="middle">state</text>
+  <path class="edge" d="M670,359 H714" marker-end="url(#a)"/>
+  <text class="el" x="684" y="353" text-anchor="middle">rules</text>
+
+  <!-- models -->
+  <rect class="frame" x="714" y="46" width="242" height="420" rx="6"/>
+  <rect class="bx key" x="724" y="56" width="222" height="96" rx="4"/>
+  <text class="tt" x="736" y="76">Pace model</text><text class="ph" x="934" y="75" text-anchor="end">P3</text>
+  <text class="ts" x="736" y="94">fuel &amp; track-evolution correction</text>
+  <text class="ts" x="736" y="110">Bayesian, PyMC or NumPyro</text>
+  <text class="ts" x="736" y="126">team random walk · driver vs mate</text>
+  <text class="ts" x="736" y="142">updated after every session</text>
+
+  <rect class="bx" x="724" y="166" width="222" height="62" rx="4"/>
+  <text class="tt" x="736" y="186">Tyres &amp; pit loss</text><text class="ph" x="934" y="185" text-anchor="end">P4</text>
+  <text class="ts" x="736" y="204">degradation spline, compound ×</text>
+  <text class="ts" x="736" y="219">circuit · pit loss per circuit</text>
+
+  <rect class="bx" x="724" y="242" width="222" height="62" rx="4"/>
+  <text class="tt" x="736" y="262">Strategy</text><text class="ph" x="934" y="261" text-anchor="end">P4</text>
+  <text class="ts" x="736" y="280">legal 1–3 stop plans</text>
+  <text class="ts" x="736" y="295">P(plan) per driver · team habits</text>
+
+  <rect class="bx" x="724" y="318" width="222" height="62" rx="4"/>
+  <text class="tt" x="736" y="338">Overtaking</text><text class="ph" x="934" y="337" text-anchor="end">P5</text>
+  <text class="ts" x="736" y="356">pass prob. from pace gap</text>
+  <text class="ts" x="736" y="371">dirty air · era aid (DRS / OM)</text>
+
+  <rect class="bx" x="724" y="394" width="222" height="62" rx="4"/>
+  <text class="tt" x="736" y="414">Event hazards</text><text class="ph" x="934" y="413" text-anchor="end">P6</text>
+  <text class="ts" x="736" y="432">SC · VSC · red flag · DNF</text>
+  <text class="ts" x="736" y="447">lap 1 · penalties · wet regime</text>
+
+  <!-- models -> engine -->
+  <path class="edge acc" d="M946,104 H990" marker-end="url(#aa)"/>
+  <path class="edge acc" d="M946,197 H990" marker-end="url(#aa)"/>
+  <path class="edge acc" d="M946,273 H990" marker-end="url(#aa)"/>
+  <path class="edge acc" d="M946,349 H990" marker-end="url(#aa)"/>
+  <path class="edge acc" d="M946,425 H968 V380 H990" marker-end="url(#aa)"/>
+
+  <!-- engine -->
+  <rect class="bx key" x="990" y="56" width="230" height="340" rx="4"/>
+  <text class="tt" x="1002" y="76">Monte Carlo race engine</text><text class="ph" x="1208" y="75" text-anchor="end">P5</text>
+  <text class="ts" x="1002" y="94">state: N runs × 22 cars, per lap</text>
+  <text class="ts" x="1002" y="109">input: posterior draws, not means</text>
+
+  <rect class="bx step" x="1004" y="122" width="186" height="28" rx="3"/>
+  <text class="tstep" x="1014" y="140">1  sample lap times</text>
+  <rect class="bx step" x="1004" y="158" width="186" height="28" rx="3"/>
+  <text class="tstep" x="1014" y="176">2  roll events (SC, DNF)</text>
+  <rect class="bx step" x="1004" y="194" width="186" height="28" rx="3"/>
+  <text class="tstep" x="1014" y="212">3  resolve overtakes</text>
+  <rect class="bx step" x="1004" y="230" width="186" height="28" rx="3"/>
+  <text class="tstep" x="1014" y="248">4  execute pit stops</text>
+  <rect class="bx step" x="1004" y="266" width="186" height="28" rx="3"/>
+  <text class="tstep" x="1014" y="284">5  update order &amp; gaps</text>
+  <path class="edge" d="M1190,280 H1202 V136 H1192" marker-end="url(#a)"/>
+  <text class="el" transform="translate(1214,208) rotate(-90)" text-anchor="middle">next lap</text>
+
+  <text class="tm" x="1002" y="322">NumPy-vectorised · seeded</text>
+  <text class="tm" x="1002" y="340">target: 10k runs &lt; 1 min</text>
+  <text class="tm" x="1002" y="358">Numba only if target missed</text>
+  <text class="tm" x="1002" y="376">property tests on every run</text>
+
+  <path class="edge" d="M1105,396 V416" marker-end="url(#a)"/>
+  <rect class="bx out" x="990" y="416" width="230" height="56" rx="4"/>
+  <text class="tt" x="1002" y="436">Probability matrix</text>
+  <text class="ts" x="1002" y="456">22 drivers × 22 positions + P(DNF)</text>
+
+  <!-- publish boundary -->
+  <line class="gline" x1="976" y1="496" x2="1232" y2="496"/>
+  <text class="gl" x="1220" y="489" text-anchor="end">PUBLISH BOUNDARY</text>
+
+  <!-- row 2 headers -->
+  <text class="hd" x="20" y="516">ORCHESTRATION</text>
+  <text class="hd" x="490" y="516">f1sim.eval</text>
+  <text class="hd" x="990" y="520">PUBLISHED</text>
+
+  <!-- orchestration -->
+  <rect class="bx key" x="20" y="530" width="200" height="110" rx="4"/>
+  <text class="tt" x="32" y="550">Scheduled workflow</text><text class="ph" x="208" y="549" text-anchor="end">P8</text>
+  <text class="ts" x="32" y="568">GitHub Actions, invokes CLI</text>
+  <text class="ts" x="32" y="588">after quali: sync → predict</text>
+  <text class="ts" x="32" y="603">→ publish</text>
+  <text class="ts" x="32" y="623">after race: sync → score</text>
+  <path class="edge" d="M220,585 H240" marker-end="url(#a)"/>
+
+  <rect class="bx" x="240" y="530" width="200" height="110" rx="4"/>
+  <text class="tt" x="252" y="550">f1sim CLI</text><text class="ph" x="428" y="549" text-anchor="end">P1–P8</text>
+  <text class="tm" x="252" y="570">f1sim data sync</text>
+  <text class="tm" x="252" y="587">f1sim predict</text>
+  <text class="tm" x="252" y="604">f1sim backtest</text>
+  <text class="tm" x="252" y="621">f1sim report</text>
+
+  <path class="edge" d="M300,530 V426" marker-end="url(#a)"/>
+  <text class="el" x="306" y="470">sync</text>
+  <path class="edge" d="M420,530 V482 H850 V466" marker-end="url(#a)"/>
+  <text class="el" x="560" y="476">predict (live)</text>
+  <path class="edge" d="M440,575 H490" marker-end="url(#a)"/>
+  <text class="el" x="465" y="569" text-anchor="middle">backtest</text>
+
+  <!-- eval -->
+  <rect class="bx key" x="490" y="530" width="210" height="90" rx="4"/>
+  <text class="tt" x="502" y="550">Walk-forward backtester</text><text class="ph" x="688" y="549" text-anchor="end">P2</text>
+  <text class="ts" x="502" y="568">replays 2022–2025 by round</text>
+  <text class="ts" x="502" y="584">cutoff = that round's quali</text>
+  <text class="ts" x="502" y="600">test fails on any later read</text>
+  <path class="edge" d="M640,530 V506 H780 V466" marker-end="url(#a)"/>
+  <text class="el" x="712" y="522" text-anchor="middle">replay round r</text>
+
+  <rect class="bx" x="490" y="640" width="210" height="70" rx="4"/>
+  <text class="tt" x="502" y="660">Baselines</text><text class="ph" x="688" y="659" text-anchor="end">P2</text>
+  <text class="ts" x="502" y="678">grid + noise · Elo</text>
+  <text class="ts" x="502" y="694">Plackett–Luce (the bar)</text>
+  <path class="edge" d="M700,675 H714 V600 H730" marker-end="url(#a)"/>
+
+  <rect class="bx" x="730" y="530" width="220" height="90" rx="4"/>
+  <text class="tt" x="742" y="550">Scoring</text><text class="ph" x="938" y="549" text-anchor="end">P2</text>
+  <text class="ts" x="742" y="568">Brier · log loss · RPS</text>
+  <text class="ts" x="742" y="584">Spearman · calibration</text>
+  <text class="ts" x="742" y="600">merge gate: beat Plackett–Luce</text>
+  <path class="edge" d="M840,620 V640" marker-end="url(#a)"/>
+
+  <rect class="bx" x="730" y="640" width="220" height="70" rx="4"/>
+  <text class="tt" x="742" y="660">Reports &amp; ablation</text><text class="ph" x="938" y="659" text-anchor="end">P6</text>
+  <text class="ts" x="742" y="678">per-season backtest report</text>
+  <text class="ts" x="742" y="694">component on / off table</text>
+
+  <path class="edge" d="M990,444 H970 V575 H950" marker-end="url(#a)"/>
+  <text class="el" transform="translate(964,528) rotate(-90)" text-anchor="middle">scored</text>
+
+  <!-- published -->
+  <path class="edge acc" d="M1105,472 V530" marker-end="url(#aa)"/>
+  <text class="el" x="1112" y="514">live run</text>
+  <rect class="bx out" x="990" y="530" width="230" height="80" rx="4"/>
+  <text class="tt" x="1002" y="550">Prediction record</text><text class="ph" x="1208" y="549" text-anchor="end">P8</text>
+  <text class="ts" x="1002" y="568">JSON, committed per round</text>
+  <text class="ts" x="1002" y="584">git commit · model version</text>
+  <text class="ts" x="1002" y="600">data cutoff timestamp</text>
+
+  <path class="edge" d="M1046,610 V640" marker-end="url(#a)"/>
+  <path class="edge" d="M1164,610 V640" marker-end="url(#a)"/>
+  <rect class="bx" x="990" y="640" width="112" height="62" rx="4"/>
+  <text class="tt" x="1000" y="660">Pages site</text>
+  <text class="ts" x="1000" y="677">race pages</text>
+  <text class="ts" x="1000" y="692">scoreboard</text>
+  <rect class="bx" x="1108" y="640" width="112" height="62" rx="4"/>
+  <text class="tt" x="1118" y="660">FastAPI</text>
+  <text class="ts" x="1118" y="677">Docker image</text>
+  <text class="tm" x="1118" y="692">/predictions/…</text>
+
+  <rect class="bx" x="990" y="722" width="230" height="46" rx="4"/>
+  <text class="tt" x="1002" y="742">PyPI package + docs site</text><text class="ph" x="1208" y="741" text-anchor="end">P9</text>
+  <text class="ts" x="1002" y="759">v1.0 · mkdocs-material</text>
+</svg>
+    </div>
+    <figcaption>Data enters on the left and never leaves the dashed local region in raw form. Every model reads the store through the qualifying cutoff, so a live prediction and a backtest replay run exactly the same code; the backtester only moves the cutoff back in time. The engine's output goes one of two ways: into scoring (backtest) or across the publish boundary as a prediction record with provenance.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <div class="col"><h2>A race weekend at runtime</h2></div>
+  <figure>
+    <div class="panel">
+<svg viewBox="0 0 1240 330" role="img" aria-label="Race weekend timeline: after each practice session the system syncs data and updates the pace posterior; after qualifying it freezes inputs, simulates and publishes; nothing runs during the race; afterwards it scores the prediction.">
+  <defs>
+    <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+  </defs>
+  <text class="hd" x="100" y="30" text-anchor="middle">FRI</text>
+  <text class="hd" x="260" y="30" text-anchor="middle">FRI</text>
+  <text class="hd" x="420" y="30" text-anchor="middle">SAT</text>
+  <text class="hd" x="580" y="30" text-anchor="middle">SAT</text>
+  <text class="hd" x="900" y="30" text-anchor="middle">SUN</text>
+  <text class="hd" x="1110" y="30" text-anchor="middle">SUN → MON</text>
+
+  <line x1="40" y1="60" x2="1200" y2="60" stroke="var(--line)" stroke-width="2"/>
+  <rect class="pill" x="45" y="44" width="110" height="32" rx="16"/><text class="tt" x="100" y="65" text-anchor="middle">FP1</text>
+  <rect class="pill" x="205" y="44" width="110" height="32" rx="16"/><text class="tt" x="260" y="65" text-anchor="middle">FP2</text>
+  <rect class="pill" x="365" y="44" width="110" height="32" rx="16"/><text class="tt" x="420" y="65" text-anchor="middle">FP3 / Sprint</text>
+  <rect class="pill" x="525" y="44" width="110" height="32" rx="16"/><text class="tt" x="580" y="65" text-anchor="middle">Qualifying</text>
+  <rect class="pill" x="845" y="44" width="110" height="32" rx="16"/><text class="tt" x="900" y="65" text-anchor="middle">Race</text>
+  <rect class="pill" x="1030" y="44" width="160" height="32" rx="16"/><text class="tt" x="1110" y="65" text-anchor="middle">Official result</text>
+
+  <line class="gline" x1="680" y1="40" x2="680" y2="290"/>
+  <text class="gl" x="688" y="52">DATA CUTOFF</text>
+
+  <!-- system actions -->
+  <path class="edge" d="M100,76 V112" marker-end="url(#b)"/>
+  <path class="edge" d="M260,76 V112" marker-end="url(#b)"/>
+  <path class="edge" d="M420,76 V112" marker-end="url(#b)"/>
+  <rect class="bx" x="35" y="112" width="130" height="64" rx="4"/>
+  <text class="ts" x="47" y="134">sync session</text><text class="ts" x="47" y="151">update pace</text><text class="ts" x="47" y="166">posterior</text>
+  <rect class="bx" x="195" y="112" width="130" height="64" rx="4"/>
+  <text class="ts" x="207" y="134">sync session</text><text class="ts" x="207" y="151">long-run stints are</text><text class="ts" x="207" y="166">the key signal</text>
+  <rect class="bx" x="355" y="112" width="130" height="64" rx="4"/>
+  <text class="ts" x="367" y="134">sync session</text><text class="ts" x="367" y="151">sprint laps count</text><text class="ts" x="367" y="166">as race-pace data</text>
+
+  <path class="edge" d="M580,76 V112 H690" marker-end="url(#b)"/>
+  <rect class="bx key" x="690" y="96" width="220" height="150" rx="4"/>
+  <text class="tt" x="702" y="118">Prediction run</text>
+  <text class="tstep" x="702" y="140">1  sync quali, apply grid penalties</text>
+  <text class="tstep" x="702" y="160">2  freeze inputs at cutoff</text>
+  <text class="tstep" x="702" y="180">3  pull rain probability</text>
+  <text class="tstep" x="702" y="200">4  simulate 10,000 races</text>
+  <text class="tstep" x="702" y="220">5  commit + publish JSON</text>
+  <text class="tm" x="702" y="238">from fitted-state cache</text>
+
+  <path class="edge" d="M900,76 V262" stroke-dasharray="3 3"/>
+  <text class="ts" x="908" y="272">nothing runs; prediction is locked</text>
+
+  <path class="edge" d="M1110,76 V112" marker-end="url(#b)"/>
+  <rect class="bx" x="1030" y="112" width="180" height="88" rx="4"/>
+  <text class="tt" x="1042" y="134">Scoring run</text>
+  <text class="ts" x="1042" y="153">sync official result</text>
+  <text class="ts" x="1042" y="169">Brier · RPS · log loss</text>
+  <text class="ts" x="1042" y="185">update scoreboard, calibration</text>
+
+  <!-- brackets -->
+  <path d="M35,214 V222 H485 V214" fill="none" stroke="var(--accent)" stroke-width="1.4"/>
+  <text class="ph" x="260" y="240" text-anchor="middle">posterior tightens session by session</text>
+  <path d="M1030,214 V222 H1210 V214" fill="none" stroke="var(--accent)" stroke-width="1.4"/>
+  <text class="ph" x="1120" y="240" text-anchor="middle">builds the live track record</text>
+</svg>
+    </div>
+    <figcaption>All three runs are the same scheduled workflow calling the CLI. On a sprint weekend there is one practice session, so the pace prior stays wider going into qualifying and the sprint laps carry more of the weight. The cutoff line here is the same one drawn between the store and the models above.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <div class="col">
+    <h2>Where the race variables land</h2>
+    <p style="margin-top:8px">The <em>Race Variables</em> doc lists about 75 factors. Each one enters through exactly one component, so each component owns a clear slice and can be switched off in the Phase 6 ablation.</p>
+  </div>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Component</th><th>Variables it absorbs</th><th>Phase</th></tr></thead>
+      <tbody>
+        <tr><td>Pace model</td><td>team pace and development drift, car–circuit fit, engine supplier, 2026 energy deployment, driver vs teammate, quali vs race pace, consistency, fuel load, track evolution</td><td>P3</td></tr>
+        <tr><td>Tyres &amp; pit loss</td><td>compound, degradation rate, the cliff, warm-up, track temperature, surface abrasiveness, pit-lane loss, team stop-time distribution</td><td>P4</td></tr>
+        <tr><td>Strategy</td><td>stop count and timing, starting tyre, sets left, mandatory compound rule, team strategy habits</td><td>P4</td></tr>
+        <tr><td>Overtaking &amp; dynamics</td><td>circuit overtaking difficulty, racecraft, dirty air, DRS (to 2025) vs Overtake Mode and active aero (2026), straight-line speed, traffic, defending</td><td>P5</td></tr>
+        <tr><td>Starting state</td><td>grid after penalties, pit-lane starts, grid side</td><td>P5</td></tr>
+        <tr><td>Event hazards</td><td>safety car, VSC, red flag, mechanical and accident DNFs, lap 1 incidents and launches, in-race penalties, rain regime</td><td>P6</td></tr>
+        <tr><td>Left out</td><td class="muted">setup, fuel and battery state (latent, absorbed as noise), fatigue, home race, contract news</td><td class="muted">—</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="col"><h2>Decisions the diagram encodes</h2></div>
+  <div class="decisions">
+    <article><span class="n">D1 · ADR-001</span><h3>Raw data stays on the machine</h3><p>Timing data is fetched by code and cached locally. Only derived predictions cross the publish boundary, which handles the licensing risk.</p></article>
+    <article><span class="n">D2</span><h3>One predict path, two callers</h3><p>The backtester calls the same pipeline as the live run with a historical cutoff. A leakage test fails on any read past it, so backtest scores describe the live system.</p></article>
+    <article><span class="n">D3</span><h3>Rules live in config</h3><p>Compound rules, race distance, sprint format and the overtaking-aid era sit in <code>configs/rules/&lt;season&gt;.yaml</code>. The 2026 reset is a data change, not a code change.</p></article>
+    <article><span class="n">D4</span><h3>Models hand over draws</h3><p>The engine samples from posteriors rather than point estimates, so model uncertainty flows straight into the probability matrix.</p></article>
+    <article><span class="n">D5</span><h3>Fitted state is cached</h3><p>Weekend updates start from the last posterior, keeping the post-qualifying run inside its time budget. NumPyro or variational inference is the fallback if PyMC is too slow.</p></article>
+    <article><span class="n">D6</span><h3>Components earn their place</h3><p>Nothing merges unless it beats Plackett–Luce on ranked probability score, and nothing stays if switching it off improves the backtest.</p></article>
+    <article><span class="n">D7 · ADR-002</span><h3>Transactional store on DuckLake</h3><p>Syncs commit atomically and every read names a snapshot, so an interrupted sync can't corrupt data and any forecast can be replayed on exactly the data it used.</p></article>
+    <article><span class="n">D8</span><h3>Core owns the interfaces</h3><p>Heavy libraries live in adapters behind small ports. The core is pure Python and fast to test; swapping a library touches one adapter.</p></article>
+  </div>
+</section>
+
+<section id="solid">
+  <div class="col">
+    <h2>SOLID: ports and adapters</h2>
+    <p style="margin-top:8px">The core (domain types, the backtester, the race engine, scoring) owns a few small interfaces and never imports FastF1, DuckDB, PyMC or FastAPI. Everything with a heavy dependency is an adapter that implements one of those interfaces, and the CLI wires them together from settings. That one rule delivers most of SOLID at once.</p>
+  </div>
+  <figure>
+    <div class="panel">
+<svg viewBox="0 0 1240 480" role="img" aria-label="Ports and adapters: source, storage, model, lap-step and publisher adapters implement small interfaces owned by the core; the composition root injects them.">
+  <defs>
+    <marker id="tri" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="10" markerHeight="10" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="var(--panel)" stroke="var(--muted)" stroke-width="1.2"/></marker>
+    <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+  </defs>
+  <text class="hd" x="40" y="40">ADAPTERS (I/O, heavy deps)</text>
+  <text class="hd" x="380" y="40">f1sim.core: pure Python, owns the ports</text>
+  <text class="hd" x="970" y="40">ADAPTERS (I/O, heavy deps)</text>
+
+  <rect class="frame" x="380" y="52" width="480" height="318" rx="8" style="stroke:var(--ink);stroke-width:1.4"/>
+
+  <!-- left ports -->
+  <rect class="bx out" x="396" y="80" width="150" height="44" rx="4"/><text class="tt" x="408" y="100">SourceAdapter</text><text class="tm" x="408" y="116">fetch(session)</text>
+  <rect class="bx out" x="396" y="176" width="150" height="44" rx="4"/><text class="tt" x="408" y="196">DataWriter</text><text class="tm" x="408" y="212">commit(batch)</text>
+  <rect class="bx out" x="396" y="272" width="150" height="44" rx="4"/><text class="tt" x="408" y="292">DataReader</text><text class="tm" x="408" y="308">read(table, snap)</text>
+
+  <!-- use cases -->
+  <rect class="bx" x="562" y="80" width="116" height="236" rx="4"/>
+  <text class="tt" x="574" y="102">Use cases</text>
+  <text class="ts" x="574" y="128">sync</text>
+  <text class="ts" x="574" y="152">backtest</text>
+  <text class="ts" x="574" y="176">simulate</text>
+  <text class="ts" x="574" y="200">score</text>
+  <text class="ts" x="574" y="224">publish</text>
+  <text class="tm" x="574" y="262">call ports</text>
+  <text class="tm" x="574" y="278">only</text>
+  <path class="edge" d="M562,102 H548" marker-end="url(#a2)"/>
+  <path class="edge" d="M562,198 H548" marker-end="url(#a2)"/>
+  <path class="edge" d="M562,294 H548" marker-end="url(#a2)"/>
+  <path class="edge" d="M678,112 H692" marker-end="url(#a2)"/>
+  <path class="edge" d="M678,202 H692" marker-end="url(#a2)"/>
+  <path class="edge" d="M678,292 H692" marker-end="url(#a2)"/>
+
+  <!-- right ports -->
+  <rect class="bx out" x="694" y="90" width="150" height="44" rx="4"/><text class="tt" x="706" y="110">Predictor</text><text class="tm" x="706" y="126">fit · predict</text>
+  <rect class="bx out" x="694" y="180" width="150" height="44" rx="4"/><text class="tt" x="706" y="200">LapStep</text><text class="tm" x="706" y="216">apply(state, rng)</text>
+  <rect class="bx out" x="694" y="270" width="150" height="44" rx="4"/><text class="tt" x="706" y="290">Publisher</text><text class="tm" x="706" y="306">publish(record)</text>
+
+  <text class="tm" x="396" y="350">Domain types: Lap · Stint · RaceState · PositionMatrix · PredictionRecord</text>
+
+  <!-- left adapters -->
+  <rect class="bx" x="40" y="66" width="230" height="34" rx="4"/><text class="ts" x="52" y="88" style="fill:var(--ink)">FastF1Adapter</text>
+  <rect class="bx" x="40" y="106" width="230" height="34" rx="4"/><text class="ts" x="52" y="128" style="fill:var(--ink)">JolpicaAdapter</text>
+  <rect class="bx opt" x="40" y="146" width="230" height="34" rx="4"/><text class="ts" x="52" y="168" style="fill:var(--ink)">OpenF1Adapter (later)</text>
+  <rect class="bx key" x="40" y="214" width="230" height="44" rx="4"/><text class="tt" x="52" y="234">DuckLakeStore</text><text class="tm" x="52" y="250">implements writer + reader</text>
+  <rect class="bx" x="40" y="276" width="230" height="44" rx="4"/><text class="tt" x="52" y="296">InMemoryStore</text><text class="tm" x="52" y="312">test double, same contract</text>
+
+  <path class="edge" d="M270,83 L396,98" stroke-dasharray="5 3" marker-end="url(#tri)"/>
+  <path class="edge" d="M270,123 L396,104" stroke-dasharray="5 3" marker-end="url(#tri)"/>
+  <path class="edge" d="M270,163 L396,110" stroke-dasharray="5 3" marker-end="url(#tri)"/>
+  <path class="edge" d="M270,230 L396,200" stroke-dasharray="5 3" marker-end="url(#tri)"/>
+  <path class="edge" d="M270,242 L396,292" stroke-dasharray="5 3" marker-end="url(#tri)"/>
+  <path class="edge" d="M270,294 L396,206" stroke-dasharray="5 3" marker-end="url(#tri)"/>
+  <path class="edge" d="M270,302 L396,298" stroke-dasharray="5 3" marker-end="url(#tri)"/>
+  <text class="el" x="300" y="64">implements</text>
+
+  <!-- right adapters -->
+  <rect class="bx key" x="970" y="66" width="230" height="34" rx="4"/><text class="ts" x="982" y="88" style="fill:var(--ink)">BayesianRaceModel (pace + sim)</text>
+  <rect class="bx" x="970" y="106" width="230" height="34" rx="4"/><text class="ts" x="982" y="128" style="fill:var(--ink)">PlackettLuce · Elo · GridNoise</text>
+  <rect class="bx" x="970" y="168" width="230" height="34" rx="4"/><text class="ts" x="982" y="190" style="fill:var(--ink)">LapTime · Overtake · PitStop</text>
+  <rect class="bx" x="970" y="208" width="230" height="34" rx="4"/><text class="ts" x="982" y="230" style="fill:var(--ink)">SafetyCar · Reliability · Lap1</text>
+  <rect class="bx" x="970" y="262" width="230" height="34" rx="4"/><text class="ts" x="982" y="284" style="fill:var(--ink)">GitPagesPublisher</text>
+  <rect class="bx" x="970" y="302" width="230" height="34" rx="4"/><text class="ts" x="982" y="324" style="fill:var(--ink)">LocalFilePublisher (tests)</text>
+
+  <path class="edge" d="M970,83 L844,108" stroke-dasharray="5 3" marker-end="url(#tri)"/>
+  <path class="edge" d="M970,123 L844,116" stroke-dasharray="5 3" marker-end="url(#tri)"/>
+  <path class="edge" d="M970,185 L844,198" stroke-dasharray="5 3" marker-end="url(#tri)"/>
+  <path class="edge" d="M970,225 L844,206" stroke-dasharray="5 3" marker-end="url(#tri)"/>
+  <path class="edge" d="M970,279 L844,288" stroke-dasharray="5 3" marker-end="url(#tri)"/>
+  <path class="edge" d="M970,319 L844,296" stroke-dasharray="5 3" marker-end="url(#tri)"/>
+  <text class="el" x="880" y="64">implements</text>
+
+  <!-- composition root -->
+  <rect class="bx key" x="380" y="404" width="480" height="48" rx="4"/>
+  <text class="tt" x="396" y="425">Composition root · cli.py</text>
+  <text class="ts" x="396" y="442">reads settings, builds the adapters, injects them into the use cases</text>
+  <path class="edge" d="M620,404 V372" marker-end="url(#a2)"/>
+  <text class="el" x="628" y="392">injects</text>
+  <path class="edge" d="M380,428 H155 V322" marker-end="url(#a2)"/>
+  <path class="edge" d="M860,428 H1085 V338" marker-end="url(#a2)"/>
+  <text class="el" x="250" y="422">builds</text>
+  <text class="el" x="950" y="422">builds</text>
+</svg>
+    </div>
+    <figcaption>Hollow-headed dashed arrows mean "implements". All dependency arrows point inward, toward the core. Swapping FastF1 for OpenF1, DuckLake for an in-memory store, or PyMC for NumPyro changes one adapter and the wiring, never the core.</figcaption>
+  </figure>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Principle</th><th>The rule in Shpeed</th><th>How it's enforced</th></tr></thead>
+      <tbody>
+        <tr><td>S · Single responsibility</td><td>Each module has one reason to change: adapters fetch, validators validate, the store commits, each LapStep models one race mechanic.</td><td>import-linter layer contracts in CI; PR checklist</td></tr>
+        <tr><td>O · Open/closed</td><td>New behaviour arrives as a new class or config file: a new LapStep, a registered Predictor, a new <code>rules/&lt;season&gt;.yaml</code>. The engine and backtester don't change.</td><td>Registries keyed by name; ablation toggles components by config</td></tr>
+        <tr><td>L · Liskov substitution</td><td>Any implementation of a port can replace another: every Predictor passes the same matrix invariants, every store passes the same read/write contract.</td><td>One contract-test suite per port, run against every implementation (InMemoryStore included)</td></tr>
+        <tr><td>I · Interface segregation</td><td>Ports are small. Reading and writing data are separate ports, so a prediction run is handed a DataReader and cannot write. Predictor has only fit and predict.</td><td>Protocols kept to 1–3 methods; reviewed in ADRs</td></tr>
+        <tr><td>D · Dependency inversion</td><td>The core depends on ports it owns; adapters depend on the core. Only the composition root knows concrete classes.</td><td>import-linter forbids fastf1, duckdb, pymc, numpyro, fastapi imports inside <code>f1sim.core</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="acid">
+  <div class="col">
+    <h2>ACID: where state lives</h2>
+    <p style="margin-top:8px">ACID is a property of stored state, so it applies to the four places Shpeed keeps state, not to the simulation maths (which is pure functions plus a seed). The data lake is the one that matters most: Parquet files on their own are not transactional. Shpeed stores them through <strong>DuckLake</strong>, DuckDB's lakehouse format, which reached v1.0 in April 2026. It keeps a SQL catalog over Parquet files, so every sync is a transaction and every read can be pinned to a snapshot (ADR-002).</p>
+  </div>
+  <figure>
+    <div class="panel">
+<svg viewBox="0 0 1240 320" role="img" aria-label="Snapshot isolation: a sync writes and validates inside one transaction while a prediction run keeps reading the previous snapshot; the new snapshot becomes visible only at commit, and a failed validation rolls back leaving nothing visible.">
+  <defs>
+    <marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+  </defs>
+  <text class="hd" x="20" y="92">SYNC (WRITER)</text>
+  <text class="hd" x="20" y="172">CATALOG</text>
+  <text class="hd" x="20" y="252">PREDICTION</text>
+  <text class="hd" x="20" y="266">(READER)</text>
+
+  <rect class="pill" x="180" y="70" width="90" height="36" rx="18"/><text class="tt" x="225" y="93" text-anchor="middle">BEGIN</text>
+  <path class="edge" d="M270,88 H290" marker-end="url(#a3)"/>
+  <rect class="bx" x="290" y="66" width="250" height="44" rx="4"/>
+  <text class="tt" x="302" y="86">Write Parquet files</text><text class="ts" x="302" y="102">on disk, not yet in the catalog</text>
+  <path class="edge" d="M540,88 H560" marker-end="url(#a3)"/>
+  <rect class="bx" x="560" y="66" width="170" height="44" rx="4"/>
+  <text class="tt" x="572" y="86">Validate</text><text class="ts" x="572" y="102">pandera, inside the txn</text>
+  <path class="edge" d="M730,88 H750" marker-end="url(#a3)"/>
+  <rect class="bx out" x="750" y="66" width="120" height="44" rx="4"/>
+  <text class="tt" x="762" y="86">COMMIT</text><text class="ts" x="762" y="102">one transaction</text>
+
+  <path d="M645,66 V40 H700" fill="none" stroke="var(--gate)" stroke-width="1.4" marker-end="url(#a3)"/>
+  <text class="gl" x="706" y="44">FAIL → ROLLBACK: nothing becomes visible, snapshot 41 stays latest</text>
+
+  <rect x="180" y="152" width="690" height="30" rx="3" fill="var(--line-soft, var(--accent-soft))" stroke="var(--line)"/>
+  <text class="tm" x="192" y="172" style="fill:var(--ink)">latest snapshot = 41</text>
+  <rect x="870" y="152" width="350" height="30" rx="3" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text class="tm" x="882" y="172" style="fill:var(--ink)">latest = 42 (durable, immutable)</text>
+
+  <line x1="870" y1="56" x2="870" y2="290" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="6 4"/>
+  <text class="ph" x="876" y="140">visible from here</text>
+
+  <rect x="240" y="232" width="610" height="36" rx="3" fill="var(--panel)" stroke="var(--ink)"/>
+  <text class="ts" x="252" y="255" style="fill:var(--ink)">Prediction run A reads AT (VERSION =&gt; 41) throughout, unaffected</text>
+  <rect x="940" y="232" width="280" height="36" rx="3" fill="var(--panel)" stroke="var(--ink)"/>
+  <text class="ts" x="952" y="255" style="fill:var(--ink)">Run B pins snapshot 42</text>
+
+  <text class="tm" x="180" y="306">A file lock allows one writer at a time; the DuckDB-file catalog is single-writer by design.</text>
+</svg>
+    </div>
+    <figcaption>Each prediction record stores the snapshot ID it read, so any published forecast can be re-run against exactly the data it saw. Snapshot retention never expires a snapshot that a published prediction or benchmark cites.</figcaption>
+  </figure>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>State</th><th>Atomicity</th><th>Consistency</th><th>Isolation</th><th>Durability</th></tr></thead>
+      <tbody>
+        <tr><td>Data lake (DuckLake)</td><td>One transaction per sync; all tables or none</td><td>pandera and schema checks before COMMIT; failure rolls back</td><td>Readers pin a snapshot; single-writer lock</td><td>Committed catalog plus immutable Parquet; <code>f1sim data verify</code></td></tr>
+        <tr><td>Fitted-state cache</td><td>Write to temp file, then atomic rename</td><td>Keyed by model version, round and snapshot; schema version in header</td><td>Readers only see complete files; a key is never overwritten</td><td>fsync before rename</td></tr>
+        <tr><td>Prediction records</td><td>Record and index land in one git commit</td><td>Validated against JSON Schema v1 before writing</td><td>Workflow concurrency group, one run per round; immutable after lights out</td><td>Git history and GitHub Pages</td></tr>
+        <tr><td class="muted">Roadmap tracker</td><td class="muted" colspan="4">Not ACID: last write wins per feature. Fine for a single owner; export ROADMAP.md into the repo as a versioned backup.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="practices">
+  <div class="col">
+    <h2>Engineering practices</h2>
+    <p style="margin-top:8px">These are set up in Phase 0 and enforced by CI from then on, so they never become a cleanup project later. Each one is a feature in the roadmap tracker.</p>
+  </div>
+  <div class="decisions">
+    <article><span class="n">Testing</span><h3>Five layers of tests</h3><p>Unit tests; property tests with hypothesis (matrix invariants, race-state rules); one contract suite per port; integration tests on recorded fixtures with the network blocked; backtest regression and a performance benchmark for model and engine changes.</p></article>
+    <article><span class="n">CI gates</span><h3>Nothing merges red</h3><p>Ruff, strict pyright, import-linter layer contracts, 85% coverage on core packages, pip-audit, and the RPS regression gate on model PRs. All required checks on a protected main.</p></article>
+    <article><span class="n">Workflow</span><h3>Trunk-based, feature-ID driven</h3><p>Short branches named like <code>feat/P1-02-fastf1-adapter</code>, Conventional Commit PR titles carrying the feature ID, squash merges, and a PR template that repeats the definition of done.</p></article>
+    <article><span class="n">Decisions</span><h3>ADRs for anything hard to undo</h3><p>ADR-001 raw data never committed; ADR-002 DuckLake for the store; ADR-003 inference backend, decided at the end of Phase 3 from timings.</p></article>
+    <article><span class="n">Reproducibility</span><h3>Every output names its inputs</h3><p>uv lockfile, seeded RNG, snapshot ID, model version and git commit on every prediction and benchmark. Same inputs give a bit-identical matrix.</p></article>
+    <article><span class="n">Releases</span><h3>SemVer and a changelog</h3><p>keep-a-changelog entries per PR; tags build the release, the Docker image and the PyPI package through trusted publishing.</p></article>
+    <article><span class="n">Observability</span><h3>Logs you can follow</h3><p>structlog JSON with a run_id on every line, timing per pipeline stage, and an alert when a scheduled race-weekend run fails twice.</p></article>
+    <article><span class="n">Security</span><h3>Least privilege</h3><p>No secrets in the repo, scoped workflow tokens, Dependabot and pip-audit, a non-root Docker image, and a read-only public API.</p></article>
+    <article><span class="n">Tracking</span><h3>One ID, end to end</h3><p>Every feature in the Shpeed Roadmap tracker has an ID, a "done when" test and dependencies. The ID appears in the branch, PR, commit and changelog, and a feature is marked done only when the definition of done is met.</p></article>
+  </div>
+</section>
+
+<section>
+  <div class="split">
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <h2>Prediction record</h2>
+      <p>The published contract. Illustrative shape; field names are proposals.</p>
+<pre><span class="c">// predictions/2027/01.json</span>
+{
+  "season": 2027,
+  "round": 1,
+  "data_cutoff": "2027-03-13T16:02:11Z",
+  "model_version": "0.9.0",
+  "git_commit": "a1b2c3d",
+  "n_sims": 10000,
+  "seed": 20270313,
+  "p_rain": 0.15,
+  "drivers": [
+    {
+      "driver_id": "...",
+      "p_position": [0.31, 0.22, 0.14, ...],  <span class="c">// 22 values, sums to 1</span>
+      "p_dnf": 0.06
+    }
+  ],
+  "score": null  <span class="c">// filled by the scoring run</span>
+}</pre>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <h2>Open questions</h2>
+      <ul class="plain">
+        <li><strong>Is the FastAPI service needed at launch?</strong> The Pages site can serve the committed JSON directly. The API could ship as a Docker image for self-hosters only, with no hosting cost.</li>
+        <li><strong>PyMC or NumPyro.</strong> Decide at the end of Phase 3 by timing a full weekend update against the post-qualifying budget.</li>
+        <li><strong>OpenF1 as a second source.</strong> Worth adding if FastF1 has an outage near a race weekend; otherwise it waits for the in-race stretch goal.</li>
+        <li><strong>Historical odds.</strong> An optional market benchmark in scoring, if a clean source turns up.</li>
+      </ul>
+      <h3 style="margin-top:8px">Stack</h3>
+      <div class="stack">
+        <span>Python 3.12</span><span>uv</span><span>FastF1</span><span>Jolpica-F1</span><span>Parquet</span><span>DuckDB</span><span>pandera</span><span>statsmodels</span><span>PyMC / NumPyro</span><span>NumPy</span><span>pytest + hypothesis</span><span>ruff · pyright</span><span>FastAPI · Docker</span><span>GitHub Actions</span><span>GitHub Pages</span><span>mkdocs-material</span><span>PyPI</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>Drawn from <em>F1 Race Simulator: Phase-by-Phase Plan</em> and <em>Race Variables</em> (both 11 Oct 2026). Build progress lives in the Shpeed Roadmap tracker. Unofficial project, not affiliated with Formula 1.</footer>
+</div>

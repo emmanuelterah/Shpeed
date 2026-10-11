@@ -1,0 +1,19 @@
+.badge {
+  display: inline-flex;
+  flex: none;
+  white-space: nowrap;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 var(--space-2);
+  border-radius: 6px;
+  font: var(--text-caption1);
+  font-weight: 600;
+}
+.neutral {
+  background: var(--fill-tertiary);
+  color: var(--secondary-label);
+}
+.caution {
+  background: color-mix(in srgb, var(--system-orange) 18%, transparent);
+  color: var(--system-orange);
+}

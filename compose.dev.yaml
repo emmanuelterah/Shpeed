@@ -1,0 +1,36 @@
+# Development overrides: hot reload for both services.
+#
+#   docker compose -f compose.yaml -f compose.dev.yaml up --build
+#     web:  http://localhost:8080        (Vite dev server with hot reload; /api proxied to the API)
+#     api:  http://localhost:8000/docs   (reloads when files in src/ change)
+#
+# Polling is on so file changes are seen through Windows and macOS bind mounts.
+# The dev server listens on 8080, the same port as production, so the port mapping
+# from compose.yaml applies unchanged (no override tags needed).
+
+services:
+  api:
+    build:
+      target: dev
+    image: shpeed-api:dev
+    read_only: false
+    environment:
+      F1SIM_LOG_LEVEL: DEBUG
+      WATCHFILES_FORCE_POLLING: "true"
+    volumes:
+      - ./src:/app/src
+      - ./predictions:/app/predictions:ro
+
+  web:
+    build:
+      target: dev
+    image: shpeed-web:dev
+    read_only: false
+    environment:
+      VITE_API_URL: /api
+      SHPEED_API_PROXY: http://api:8000
+      SHPEED_POLL: "1"
+    volumes:
+      - ./frontend:/app
+      # Keep the container's own node_modules instead of the host's
+      - /app/node_modules

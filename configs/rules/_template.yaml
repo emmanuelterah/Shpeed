@@ -1,0 +1,12 @@
+# Copy to <season>.yaml and fill in. Loaded and validated by f1sim (P4-06).
+season: 0000
+race_distance_km: 0            # minimum race distance
+dry_compounds_per_event: 3     # Pirelli nominates three dry compounds per event
+mandatory_compound_change: true  # at least two different dry compounds in a dry race
+overtake_aid: null             # drs | overtake_mode
+active_aero: false
+sprint_format: null            # describe sessions on sprint weekends
+power_unit:
+  mguh: false
+  mguk_kw: 0
+notes: ""

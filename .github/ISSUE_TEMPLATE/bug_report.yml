@@ -1,0 +1,14 @@
+name: Bug report
+description: Something behaves differently from the docs or the roadmap's "done when"
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes: { label: What happened, description: Include the command and the run_id from the logs }
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes: { label: What you expected }
+  - type: input
+    id: version
+    attributes: { label: f1sim version or commit }

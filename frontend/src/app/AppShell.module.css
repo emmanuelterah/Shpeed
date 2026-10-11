@@ -1,0 +1,94 @@
+.shell {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+.content {
+  min-width: 0;
+  padding-bottom: calc(var(--tab-bar-height) + env(safe-area-inset-bottom));
+}
+
+.sidebar {
+  display: none;
+}
+
+.tabBar {
+  position: fixed;
+  inset: auto 0 0 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  height: calc(var(--tab-bar-height) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--material-bar);
+  backdrop-filter: var(--material-blur);
+  -webkit-backdrop-filter: var(--material-blur);
+  border-top: 0.5px solid var(--separator);
+  z-index: 10;
+}
+
+.tabItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: var(--hit-target);
+  font: var(--text-caption2);
+  font-weight: 500;
+  color: var(--secondary-label);
+  text-decoration: none;
+}
+
+.tabItem:global(.active) {
+  color: var(--tint);
+}
+
+@media (min-width: 768px) {
+  .shell {
+    grid-template-columns: 240px 1fr;
+  }
+  .content {
+    padding-bottom: 0;
+  }
+  .tabBar {
+    display: none;
+  }
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    position: sticky;
+    top: 0;
+    height: 100dvh;
+    padding: var(--space-6) var(--space-3);
+    background: var(--material-sidebar);
+    backdrop-filter: var(--material-blur);
+    -webkit-backdrop-filter: var(--material-blur);
+    border-right: 0.5px solid var(--separator);
+  }
+  .brand {
+    font: var(--text-title3);
+    font-weight: 700;
+    padding: 0 var(--space-3) var(--space-4);
+  }
+  .sideItem {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-height: 36px;
+    padding: 0 var(--space-3);
+    border-radius: var(--radius-sm);
+    font: var(--text-callout);
+    color: var(--label);
+    text-decoration: none;
+  }
+  .sideItem:hover {
+    background: var(--fill-quaternary);
+  }
+  .sideItem:global(.active) {
+    background: var(--fill-tertiary);
+    color: var(--tint);
+    font-weight: 600;
+  }
+}

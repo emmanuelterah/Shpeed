@@ -1,0 +1,52 @@
+# Shpeed local stack
+#
+#   docker compose up --build
+#     web:  http://localhost:8080        (frontend; /api is proxied to the API)
+#     api:  http://localhost:8000/docs   (interactive API docs)
+#
+# Development with hot reload: see compose.dev.yaml.
+
+name: shpeed
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+      target: runtime
+    image: shpeed-api:local
+    environment:
+      F1SIM_LOG_LEVEL: INFO
+    volumes:
+      # Published records are read live from the repo; the API never writes (read-only mount)
+      - ./predictions:/app/predictions:ro
+    ports:
+      - "8000:8000"
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 15s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+      target: runtime
+      args:
+        VITE_API_URL: /api
+    image: shpeed-web:local
+    ports:
+      - "8080:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped

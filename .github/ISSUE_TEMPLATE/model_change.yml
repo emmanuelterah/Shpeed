@@ -1,0 +1,12 @@
+name: Model change proposal
+description: A new model component or a change to an existing one
+labels: [model]
+body:
+  - type: textarea
+    id: hypothesis
+    attributes: { label: Hypothesis, description: Which race variable does this capture, and why should it improve the backtest? }
+    validations: { required: true }
+  - type: textarea
+    id: evaluation
+    attributes: { label: How it will be evaluated, description: Seasons, metrics and the ablation you will run }
+    validations: { required: true }

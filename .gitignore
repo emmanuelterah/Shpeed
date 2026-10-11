@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+.hypothesis/
+.benchmarks/
+.import_linter_cache/
+dist/
+build/
+*.egg-info/
+
+# Local data (ADR-0001: raw data is fetched by code, never committed)
+data/*
+!data/README.md
+!data/.gitkeep
+*.ducklake
+*.ducklake.wal
+*.duckdb
+*.duckdb.wal
+cache/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/test-results/
+frontend/playwright-report/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
