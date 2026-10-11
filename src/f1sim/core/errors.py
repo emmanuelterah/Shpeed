@@ -13,6 +13,10 @@ class ValidationError(DataError):
     """Data failed a schema or plausibility check; the transaction is rolled back."""
 
 
+class StoreBusyError(ShpeedError):
+    """Another process holds the store's single-writer lock."""
+
+
 class LeakageError(ShpeedError):
     """A read went past the prediction cutoff. Always a bug."""
 

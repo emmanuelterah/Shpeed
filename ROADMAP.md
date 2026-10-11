@@ -3,7 +3,7 @@
 Snapshot of the Shpeed Roadmap tracker, 11 Oct 2026. The tracker is the source of truth; regenerate this file from it ("Export ROADMAP.md") when statuses change.
 
 - **Plan:** 26 weeks at 10–15 h/week, week 1 starting Mon 12 Oct 2026, v1.0 by 11 Apr 2027
-- **Progress:** 0 of 115 must-have features done through v1.0, 18 in progress or in review (130 features in total, including should-haves and stretch goals)
+- **Progress:** 0 of 115 must-have features done through v1.0, 36 in progress or in review (130 features in total, including should-haves and stretch goals)
 - **Releases:** v0.1 (MVP) at the end of Phase 5; v1.0 at the end of Phase 9
 
 ## How to use this roadmap
@@ -73,25 +73,25 @@ Snapshot of the Shpeed Roadmap tracker, 11 Oct 2026. The tracker is the source o
 
 | | ID | Feature | Area | Priority | Done when | Depends on | Principles |
 |---|---|---|---|---|---|---|---|
-| ⬜ | `P1-01` | Domain model for F1 entities | Data | must | Frozen dataclasses for Season, Event, Session, Driver, Team, Lap, Stint, PitStop, TrackStatus, Result with unit tests. | P0-04 | SOLID:SRP |
-| ⬜ | `P1-02` | FastF1 source adapter | Data | must | Implements SourceAdapter: laps, stints, compounds, weather, track status, race-control messages. | P1-01 | SOLID:LSP, SOLID:DIP |
-| ⬜ | `P1-03` | Jolpica-F1 source adapter | Data | must | Implements SourceAdapter: results, grids, pit stops, finishing status, standings. | P1-01 | SOLID:LSP, SOLID:DIP |
-| ⬜ | `P1-04` | Resilient fetching | Data | must | Shared HTTP layer with cache, exponential backoff with jitter and a rate limiter; tested with simulated 429/5xx. | P1-02, P1-03 | SOLID:SRP |
-| ⬜ | `P1-05` | Canonical driver, team and event keys | Data | must | Stable IDs across sources; mapping tables versioned in configs/. | P1-01 |  |
-| ⬜ | `P1-06` | Team lineage table | Data | must | Rebrands resolve to one entity (e.g. Sauber → Audi); tested on 2018–2026 entries. | P1-05 |  |
-| ⬜ | `P1-07` | Validation schemas | Data | must | pandera schemas for every table: lap-time ranges, no duplicate laps, contiguous stints. | P1-01 | ACID:C |
-| ⬜ | `P1-08` | clean_lap flag | Data | must | Excludes in/out laps, lap 1, and SC/VSC/red-flag laps; property-tested. | P1-07 |  |
-| ⬜ | `P1-09` | DuckLake store over Parquet (ADR-002) | Store | must | Tables live in a DuckLake catalog (DuckDB file) with Parquet data files; ADR-002 records the choice over Delta Lake, Iceberg and a hand-rolled catalog. | P1-01 | ACID:A, ACID:D |
-| ⬜ | `P1-10` | One sync = one transaction | Store | must | Each sync writes all its tables inside a single DuckLake transaction; the resulting snapshot ID is stored with sync metadata (sources, versions, run_id). | P1-09 | ACID:A, ACID:D |
-| ⬜ | `P1-11` | Atomic commit protocol | Store | must | Data is validated before COMMIT and a failed check rolls back; a kill test mid-sync leaves the previous snapshot intact and readable. | P1-07, P1-10 | ACID:A, ACID:C, ACID:D |
-| ⬜ | `P1-12` | Single-writer lock | Store | must | A file lock prevents two syncs at once (the DuckDB-file catalog is single-writer); the second writer exits with a clear message. | P1-11 | ACID:I |
-| ⬜ | `P1-13` | Snapshot-pinned DataRepository | Store | must | read(table, snapshot_id, as_of) queries AT (VERSION => snapshot_id); readers never see a sync in progress. | P1-10 | ACID:I, SOLID:DIP |
-| ⬜ | `P1-14` | Integrity verification | Store | must | `f1sim data verify` checks every data file the catalog references exists and row counts match the sync metadata. | P1-10 | ACID:D |
-| ⬜ | `P1-15` | Incremental sync | Data | must | Sync skips sessions already present in the latest snapshot; a re-run with no new data creates no snapshot. | P1-11 |  |
-| ⬜ | `P1-16` | Per-session data-quality report | Data | must | Markdown report of row counts, validation failures and clean-lap share per session. | P1-07 |  |
-| ⬜ | `P1-17` | CLI: f1sim data sync | Delivery | must | `f1sim data sync --season 2025` runs the full pipeline and prints the new snapshot ID. | P1-11, P1-15 |  |
-| ⬜ | `P1-18` | Recorded fixtures for offline CI | Quality | must | Adapter tests replay recorded responses; CI blocks outbound network. | P1-02, P1-03 |  |
-| ⬜ | `P1-19` | Snapshot retention | Store | should | `f1sim data gc` expires old snapshots and cleans unreferenced files, never one a published prediction or benchmark cites. | P1-10 | ACID:D |
+| 🔍 | `P1-01` | Domain model for F1 entities | Data | must | Frozen dataclasses for Season, Event, Session, Driver, Team, Lap, Stint, PitStop, TrackStatus, Result with unit tests. | P0-04 | SOLID:SRP |
+| 🔍 | `P1-02` | FastF1 source adapter | Data | must | Implements SourceAdapter: laps, stints, compounds, weather, track status, race-control messages. | P1-01 | SOLID:LSP, SOLID:DIP |
+| 🔍 | `P1-03` | Jolpica-F1 source adapter | Data | must | Implements SourceAdapter: results, grids, pit stops, finishing status, standings. | P1-01 | SOLID:LSP, SOLID:DIP |
+| 🔍 | `P1-04` | Resilient fetching | Data | must | Shared HTTP layer with cache, exponential backoff with jitter and a rate limiter; tested with simulated 429/5xx. | P1-02, P1-03 | SOLID:SRP |
+| 🔍 | `P1-05` | Canonical driver, team and event keys | Data | must | Stable IDs across sources; mapping tables versioned in configs/. | P1-01 |  |
+| 🔍 | `P1-06` | Team lineage table | Data | must | Rebrands resolve to one entity (e.g. Sauber → Audi); tested on 2018–2026 entries. | P1-05 |  |
+| 🔍 | `P1-07` | Validation schemas | Data | must | pandera schemas for every table: lap-time ranges, no duplicate laps, contiguous stints. | P1-01 | ACID:C |
+| 🔍 | `P1-08` | clean_lap flag | Data | must | Excludes in/out laps, lap 1, and SC/VSC/red-flag laps; property-tested. | P1-07 |  |
+| 🔍 | `P1-09` | DuckLake store over Parquet (ADR-002) | Store | must | Tables live in a DuckLake catalog (DuckDB file) with Parquet data files; ADR-002 records the choice over Delta Lake, Iceberg and a hand-rolled catalog. | P1-01 | ACID:A, ACID:D |
+| 🔍 | `P1-10` | One sync = one transaction | Store | must | Each sync writes all its tables inside a single DuckLake transaction; the resulting snapshot ID is stored with sync metadata (sources, versions, run_id). | P1-09 | ACID:A, ACID:D |
+| 🔍 | `P1-11` | Atomic commit protocol | Store | must | Data is validated before COMMIT and a failed check rolls back; a kill test mid-sync leaves the previous snapshot intact and readable. | P1-07, P1-10 | ACID:A, ACID:C, ACID:D |
+| 🔍 | `P1-12` | Single-writer lock | Store | must | A file lock prevents two syncs at once (the DuckDB-file catalog is single-writer); the second writer exits with a clear message. | P1-11 | ACID:I |
+| 🔍 | `P1-13` | Snapshot-pinned DataRepository | Store | must | read(table, snapshot_id, as_of) queries AT (VERSION => snapshot_id); readers never see a sync in progress. | P1-10 | ACID:I, SOLID:DIP |
+| 🔍 | `P1-14` | Integrity verification | Store | must | `f1sim data verify` checks every data file the catalog references exists and row counts match the sync metadata. | P1-10 | ACID:D |
+| 🔍 | `P1-15` | Incremental sync | Data | must | Sync skips sessions already present in the latest snapshot; a re-run with no new data creates no snapshot. | P1-11 |  |
+| 🔍 | `P1-16` | Per-session data-quality report | Data | must | Markdown report of row counts, validation failures and clean-lap share per session. | P1-07 |  |
+| 🔍 | `P1-17` | CLI: f1sim data sync | Delivery | must | `f1sim data sync --season 2025` runs the full pipeline and prints the new snapshot ID. | P1-11, P1-15 |  |
+| 🔍 | `P1-18` | Recorded fixtures for offline CI | Quality | must | Adapter tests replay recorded responses; CI blocks outbound network. | P1-02, P1-03 |  |
+| 🔍 | `P1-19` | Snapshot retention | Store | should | `f1sim data gc` expires old snapshots and cleans unreferenced files, never one a published prediction or benchmark cites. | P1-10 | ACID:D |
 
 ## Phase 2 — Baselines & evaluation
 

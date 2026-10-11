@@ -1,0 +1,87 @@
+{
+ "MRData": {
+  "xmlns": "",
+  "series": "f1",
+  "url": "",
+  "limit": "100",
+  "offset": "0",
+  "total": "5",
+  "RaceTable": {
+   "season": "2024",
+   "Races": [
+    {
+     "season": "2024",
+     "round": "1",
+     "url": "",
+     "raceName": "Bahrain Grand Prix",
+     "Circuit": {
+      "circuitId": "bahrain",
+      "url": "",
+      "circuitName": "Bahrain International Circuit",
+      "Location": {
+       "lat": "0",
+       "long": "0",
+       "locality": "Sakhir",
+       "country": "Bahrain"
+      }
+     },
+     "date": "2024-03-02",
+     "time": "15:00:00Z",
+     "FirstPractice": {
+      "date": "2024-02-29",
+      "time": "11:30:00Z"
+     },
+     "SecondPractice": {
+      "date": "2024-02-29",
+      "time": "15:00:00Z"
+     },
+     "ThirdPractice": {
+      "date": "2024-03-01",
+      "time": "12:30:00Z"
+     },
+     "Qualifying": {
+      "date": "2024-03-01",
+      "time": "16:00:00Z"
+     },
+     "PitStops": [
+      {
+       "driverId": "max_verstappen",
+       "lap": "17",
+       "stop": "1",
+       "time": "15:40:00",
+       "duration": "22.818"
+      },
+      {
+       "driverId": "perez",
+       "lap": "16",
+       "stop": "1",
+       "time": "15:40:00",
+       "duration": "23.104"
+      },
+      {
+       "driverId": "sainz",
+       "lap": "15",
+       "stop": "1",
+       "time": "15:40:00",
+       "duration": "22.995"
+      },
+      {
+       "driverId": "max_verstappen",
+       "lap": "37",
+       "stop": "2",
+       "time": "15:40:00",
+       "duration": "23.101"
+      },
+      {
+       "driverId": "norris",
+       "lap": "20",
+       "stop": "1",
+       "time": "15:40:00",
+       "duration": "1:02.345"
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

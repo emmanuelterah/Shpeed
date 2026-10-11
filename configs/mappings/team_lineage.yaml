@@ -1,0 +1,19 @@
+# Team lineage (P1-06): constructor IDs (Jolpica/Ergast) that are the same team under a
+# new name share one lineage, so models carry pace and reliability history across rebrands.
+# Any constructor not listed is its own lineage.
+#
+# 2026 entries ("audi", "cadillac") follow the published team names; confirm the exact
+# constructor IDs against Jolpica after the first 2026 sync (`f1sim data sync --season 2026`).
+
+lineages:
+  enstone: [renault, alpine]
+  faenza: [toro_rosso, alphatauri, rb]
+  hinwil: [sauber, alfa, audi]
+  silverstone: [force_india, racing_point, aston_martin]
+  brackley: [mercedes]
+  maranello: [ferrari]
+  milton_keynes: [red_bull]
+  woking: [mclaren]
+  grove: [williams]
+  kannapolis: [haas]
+  cadillac: [cadillac]

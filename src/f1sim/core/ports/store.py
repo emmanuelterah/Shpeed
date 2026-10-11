@@ -1,4 +1,6 @@
-"""Data store ports (ADR-0002). Reading and writing are separate (interface segregation)."""
+"""Data store ports (ADR-0002). Reading, writing and the sync ledger are separate
+interfaces (interface segregation): a prediction run is handed only a ``DataReader``.
+"""
 
 from collections.abc import Mapping
 from datetime import datetime
@@ -6,7 +8,7 @@ from typing import Protocol
 
 import pandas as pd
 
-from f1sim.core.domain.entities import SnapshotId
+from f1sim.core.domain.entities import SessionKey, SnapshotId
 
 
 class DataWriter(Protocol):
@@ -15,7 +17,8 @@ class DataWriter(Protocol):
     def commit(self, tables: Mapping[str, pd.DataFrame], *, run_id: str) -> SnapshotId:
         """Write all tables in one transaction.
 
-        Raises ``ValidationError`` and writes nothing if any table fails validation.
+        Rows matching each table's replace key are replaced, so re-syncing a session is
+        idempotent. Raises ``ValidationError`` and writes nothing if any check fails.
         """
         ...
 
@@ -26,8 +29,11 @@ class DataReader(Protocol):
     def latest_snapshot(self) -> SnapshotId: ...
 
     def read(self, table: str, *, snapshot: SnapshotId, as_of: datetime) -> pd.DataFrame:
-        """Rows of ``table`` in ``snapshot`` timestamped at or before ``as_of``.
-
-        Implementations raise ``LeakageError`` if asked for data past ``as_of``.
-        """
+        """Rows of ``table`` in ``snapshot`` whose ``available_at`` is at or before ``as_of``."""
         ...
+
+
+class SyncLedger(Protocol):
+    """Which sessions each source has already stored, for incremental syncs."""
+
+    def ingested_sessions(self, source: str) -> frozenset[SessionKey]: ...

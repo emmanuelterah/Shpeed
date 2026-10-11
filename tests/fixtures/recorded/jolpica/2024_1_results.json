@@ -1,0 +1,164 @@
+{
+ "MRData": {
+  "xmlns": "",
+  "series": "f1",
+  "url": "",
+  "limit": "100",
+  "offset": "0",
+  "total": "4",
+  "RaceTable": {
+   "season": "2024",
+   "Races": [
+    {
+     "season": "2024",
+     "round": "1",
+     "url": "",
+     "raceName": "Bahrain Grand Prix",
+     "Circuit": {
+      "circuitId": "bahrain",
+      "url": "",
+      "circuitName": "Bahrain International Circuit",
+      "Location": {
+       "lat": "0",
+       "long": "0",
+       "locality": "Sakhir",
+       "country": "Bahrain"
+      }
+     },
+     "date": "2024-03-02",
+     "time": "15:00:00Z",
+     "FirstPractice": {
+      "date": "2024-02-29",
+      "time": "11:30:00Z"
+     },
+     "SecondPractice": {
+      "date": "2024-02-29",
+      "time": "15:00:00Z"
+     },
+     "ThirdPractice": {
+      "date": "2024-03-01",
+      "time": "12:30:00Z"
+     },
+     "Qualifying": {
+      "date": "2024-03-01",
+      "time": "16:00:00Z"
+     },
+     "Results": [
+      {
+       "number": "1",
+       "position": "1",
+       "positionText": "1",
+       "points": "26",
+       "Driver": {
+        "driverId": "max_verstappen",
+        "permanentNumber": "33",
+        "code": "VER",
+        "url": "",
+        "givenName": "Max",
+        "familyName": "Verstappen",
+        "dateOfBirth": "1990-01-01",
+        "nationality": "x"
+       },
+       "Constructor": {
+        "constructorId": "red_bull",
+        "url": "",
+        "name": "Red Bull",
+        "nationality": "x"
+       },
+       "grid": "1",
+       "laps": "57",
+       "status": "Finished",
+       "Time": {
+        "millis": "5504742",
+        "time": ""
+       }
+      },
+      {
+       "number": "11",
+       "position": "2",
+       "positionText": "2",
+       "points": "18",
+       "Driver": {
+        "driverId": "perez",
+        "permanentNumber": "11",
+        "code": "PER",
+        "url": "",
+        "givenName": "Sergio",
+        "familyName": "P\u00e9rez",
+        "dateOfBirth": "1990-01-01",
+        "nationality": "x"
+       },
+       "Constructor": {
+        "constructorId": "red_bull",
+        "url": "",
+        "name": "Red Bull",
+        "nationality": "x"
+       },
+       "grid": "5",
+       "laps": "57",
+       "status": "Finished",
+       "Time": {
+        "millis": "5527199",
+        "time": ""
+       }
+      },
+      {
+       "number": "55",
+       "position": "3",
+       "positionText": "3",
+       "points": "15",
+       "Driver": {
+        "driverId": "sainz",
+        "permanentNumber": "55",
+        "code": "SAI",
+        "url": "",
+        "givenName": "Carlos",
+        "familyName": "Sainz",
+        "dateOfBirth": "1990-01-01",
+        "nationality": "x"
+       },
+       "Constructor": {
+        "constructorId": "ferrari",
+        "url": "",
+        "name": "Ferrari",
+        "nationality": "x"
+       },
+       "grid": "4",
+       "laps": "57",
+       "status": "Finished",
+       "Time": {
+        "millis": "5529852",
+        "time": ""
+       }
+      },
+      {
+       "number": "4",
+       "position": "4",
+       "positionText": "R",
+       "points": "0",
+       "Driver": {
+        "driverId": "norris",
+        "permanentNumber": "4",
+        "code": "NOR",
+        "url": "",
+        "givenName": "Lando",
+        "familyName": "Norris",
+        "dateOfBirth": "1990-01-01",
+        "nationality": "x"
+       },
+       "Constructor": {
+        "constructorId": "mclaren",
+        "url": "",
+        "name": "McLaren",
+        "nationality": "x"
+       },
+       "grid": "7",
+       "laps": "40",
+       "status": "Accident"
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

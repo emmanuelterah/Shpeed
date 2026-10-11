@@ -4,7 +4,7 @@
 
 Before each Grand Prix, Shpeed simulates the race lap by lap, thousands of times. Each run samples car pace, tyre wear, pit strategy, overtakes, safety cars and retirements. From the outcomes it computes the probability of every driver finishing in every position. After the race, it scores that forecast against the official result in public.
 
-> **Project status: Phase 0 of 10 (foundations).** The repository structure, engineering tooling, read-only API, web app shell and Docker setup are in place. The data pipeline and the models are not built yet, so there are no real forecasts. See [What works today](#what-works-today) and [ROADMAP.md](ROADMAP.md).
+> **Project status: Phase 1 of 10 (data ingestion).** The foundations, read-only API, web app shell, Docker setup and the data pipeline are built and tested offline. The first sync against the live data sources, the baselines and the models come next, so there are no real forecasts yet. See [What works today](#what-works-today) and [ROADMAP.md](ROADMAP.md).
 >
 > Shpeed is an unofficial project. It is not associated with Formula 1, the FIA or any team.
 
@@ -90,13 +90,13 @@ The full design (components, boundaries, data flow and decisions) is in [ARCHITE
 | Read-only API (`/health`, `/predictions`, `/predictions/latest`, `/predictions/{season}/{round}`) | ✅ Built, tested |
 | Web app shell: Race, Season, Calibration and About screens, Apple-style design system | ✅ Built; the Race screen shows clearly labelled sample data in development |
 | Docker Compose stack (API + web), with a hot-reload development mode | ✅ In place |
-| Data ingestion (`f1sim data sync`) | 🔜 Phase 1 |
+| Data ingestion: `f1sim data sync`, `verify`, `report`, `gc` | ✅ Built and tested offline; first live sync pending |
 | Baselines and backtester | 🔜 Phase 2 |
 | Pace, tyre, strategy and event models; Monte Carlo engine | 🔜 Phases 3–6 |
 | Automated race-weekend forecasts | 🔜 Phase 8 |
 | Public v1.0 with live forecasts | 🔜 Phase 9, targeted for the 2027 season opener |
 
-The CLI commands (`f1sim data sync`, `predict`, `backtest`, `report score`) exist but raise `NotImplementedError` with the roadmap ID of the feature that will implement them.
+The `predict`, `backtest` and `report score` commands exist but raise `NotImplementedError` with the roadmap ID of the feature that will implement them.
 
 ## Getting started
 
@@ -133,6 +133,14 @@ uv sync --all-extras                                  # environment from the loc
 uv run pytest                                         # tests
 uv run uvicorn f1sim.api.app:app --reload             # API on http://localhost:8000
 uv run f1sim --help                                   # command-line interface
+```
+
+**Load real data** (needs internet access; the first season takes a while because FastF1 downloads every session, later runs only fetch what is new):
+
+```bash
+uv run f1sim data sync --season 2024                  # Jolpica results + FastF1 laps, weather, track status
+uv run f1sim data verify                              # every stored file present
+uv run f1sim data report --season 2024                # per-session data-quality table
 ```
 
 **Frontend** (in a second terminal)
