@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
+      - uses: astral-sh/setup-uv@v7
       - run: uv sync --all-extras
       - name: Lint (ruff, including Google docstrings and imports at top)
         run: uv run ruff check . && uv run ruff format --check .
