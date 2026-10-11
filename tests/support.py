@@ -1,9 +1,16 @@
 """Small builders for valid canonical rows, shared by tests."""
 
-from datetime import datetime
+from collections.abc import Sequence
+from datetime import datetime, timedelta
 from typing import Any
 
+import numpy as np
 import pandas as pd
+
+from f1sim.core.domain import PositionMatrix
+from f1sim.core.domain.entities import EventKey, SnapshotId
+from f1sim.core.domain.race import RaceEntry
+from f1sim.core.ports.store import DataReader
 
 T0 = datetime(2025, 3, 16, 4, 0)
 
@@ -89,3 +96,103 @@ def result_rows(
             ]
         ]
     )
+
+
+SYNTH_DRIVERS = tuple(f"driver_{i:02d}" for i in range(10))
+"""Synthetic drivers, fastest first: ``driver_00`` is the strongest."""
+
+
+def synthetic_results(
+    *,
+    seasons: tuple[int, ...] = (2023, 2024),
+    rounds: int = 8,
+    seed: int = 7,
+    skill_spread: float = 2.5,
+    dnf_rate: float = 0.08,
+    sprint_rounds: tuple[int, ...] = (),
+) -> pd.DataFrame:
+    """Build ``results`` for whole synthetic seasons with a known strength order.
+
+    Each weekend has qualifying (and optionally a sprint) a day before the race; orders
+    are Plackett-Luce draws whose log strengths fall linearly from ``skill_spread`` to 0.
+    """
+    rng = np.random.default_rng(seed)
+    log_w = np.linspace(skill_spread, 0.0, len(SYNTH_DRIVERS))
+    rows: list[dict[str, Any]] = []
+    for season in seasons:
+        for round_ in range(1, rounds + 1):
+            sessions = ("Q", *(("S",) if round_ in sprint_rounds else ()), "R")
+            start = datetime(season, 3, 1, 15, 0) + timedelta(days=14 * (round_ - 1))
+            rows += _weekend(rng, log_w, (season, round_, start), sessions, dnf_rate)
+    return pd.DataFrame(rows)
+
+
+def _weekend(
+    rng: np.random.Generator,
+    log_w: Any,
+    when: tuple[int, int, datetime],
+    sessions: tuple[str, ...],
+    dnf_rate: float,
+) -> list[dict[str, Any]]:
+    season, round_, start = when
+    rows: list[dict[str, Any]] = []
+    grid: dict[int, int] = {}
+    for offset, session in enumerate(sessions):
+        order: list[int] = np.argsort(-(log_w + rng.gumbel(size=len(log_w)))).tolist()
+        out = (rng.random(len(log_w)) < dnf_rate) & (session != "Q")
+        base = {
+            "season": season,
+            "round": round_,
+            "session": session,
+            "available_at": start + timedelta(hours=offset * 24),
+        }
+        classified = [i for i in order if not out[i]]
+        for idx in order:
+            pos = classified.index(idx) + 1 if idx in classified else None
+            rows.append(base | _driver_fields(idx, grid.get(idx, 0), pos))
+        if session == "Q":
+            grid = {idx: n for n, idx in enumerate(order, start=1)}
+    return rows
+
+
+def _driver_fields(idx: int, grid: int, position: int | None) -> dict[str, Any]:
+    return {
+        "driver_id": SYNTH_DRIVERS[idx],
+        "driver_code": f"D{idx:02d}",
+        "driver_number": idx + 1,
+        "team_id": f"team_{idx // 2}",
+        "team_name": f"Team {idx // 2}",
+        "grid": grid,
+        "position": position,
+        "position_text": "R" if position is None else str(position),
+        "status": "Retired" if position is None else "Finished",
+        "points": 0.0,
+        "laps": 57,
+        "time_s": None,
+        "q1_s": None,
+        "q2_s": None,
+        "q3_s": None,
+    }
+
+
+class UniformModel:
+    """Every position equally likely, with a fixed retirement rate; the no-skill yardstick."""
+
+    name = "uniform"
+
+    def __init__(self, seed: int, p_dnf: float = 0.08) -> None:
+        """Create the model; the seed is kept only to match the factory signature."""
+        self.seed = seed
+        self.p_dnf = p_dnf
+
+    def fit(self, reader: DataReader, *, snapshot: SnapshotId, cutoff: datetime) -> None:
+        """Read the history once, as a real model would, and learn nothing from it."""
+        reader.read("results", snapshot=snapshot, as_of=cutoff)
+
+    def predict(self, event: EventKey, entries: Sequence[RaceEntry]) -> PositionMatrix:
+        """Give every entry the same chance of every position."""
+        del event
+        n = len(entries)
+        ids = tuple(e.driver_id for e in entries)
+        finish = (1.0 - self.p_dnf) / n
+        return PositionMatrix(ids, np.full((n, n), finish), np.full(n, self.p_dnf))

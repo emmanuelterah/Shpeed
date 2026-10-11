@@ -4,7 +4,7 @@
 
 Before each Grand Prix, Shpeed simulates the race lap by lap, thousands of times. Each run samples car pace, tyre wear, pit strategy, overtakes, safety cars and retirements. From the outcomes it computes the probability of every driver finishing in every position. After the race, it scores that forecast against the official result in public.
 
-> **Project status: Phase 1 of 10 (data ingestion).** The foundations, read-only API, web app shell, Docker setup and the data pipeline are built and tested offline. The first sync against the live data sources, the baselines and the models come next, so there are no real forecasts yet. See [What works today](#what-works-today) and [ROADMAP.md](ROADMAP.md).
+> **Project status: Phase 2 of 10 (baselines and evaluation).** The foundations, read-only API, web app shell, Docker setup, the data pipeline, three baseline models and the walk-forward backtester are built and tested offline. The first sync against the live data sources and the first real backtest scores come next, then the simulation models, so there are no real forecasts yet. See [What works today](#what-works-today) and [ROADMAP.md](ROADMAP.md).
 >
 > Shpeed is an unofficial project. It is not associated with Formula 1, the FIA or any team.
 
@@ -91,12 +91,12 @@ The full design (components, boundaries, data flow and decisions) is in [ARCHITE
 | Web app shell: Race, Season, Calibration and About screens, Apple-style design system | ✅ Built; the Race screen shows clearly labelled sample data in development |
 | Docker Compose stack (API + web), with a hot-reload development mode | ✅ In place |
 | Data ingestion: `f1sim data sync`, `verify`, `report`, `gc` | ✅ Built and tested offline; first live sync pending |
-| Baselines and backtester | 🔜 Phase 2 |
+| Baselines (grid + noise, Elo, Plackett–Luce) and the walk-forward backtester: `f1sim backtest` with leakage guard, report, benchmark records and regression gate | ✅ Built and tested on synthetic seasons; real scores need a live sync |
 | Pace, tyre, strategy and event models; Monte Carlo engine | 🔜 Phases 3–6 |
 | Automated race-weekend forecasts | 🔜 Phase 8 |
 | Public v1.0 with live forecasts | 🔜 Phase 9, targeted for the 2027 season opener |
 
-The `predict`, `backtest` and `report score` commands exist but raise `NotImplementedError` with the roadmap ID of the feature that will implement them.
+The `predict` and `report score` commands exist but raise `NotImplementedError` with the roadmap ID of the feature that will implement them.
 
 ## Getting started
 
@@ -142,6 +142,16 @@ uv run f1sim data sync --season 2024                  # Jolpica results + FastF1
 uv run f1sim data verify                              # every stored file present
 uv run f1sim data report --season 2024                # per-session data-quality table
 ```
+
+**Backtest the baselines** (after syncing the seasons you want to score, plus one earlier season for the models to learn from):
+
+```bash
+uv run f1sim backtest --model all --seasons 2023-2024 --report backtest.md   # leaderboard, calibration, per race
+uv run f1sim backtest --model elo --seasons 2023-2024 --record                # append to benchmarks/elo.json
+uv run f1sim backtest --model elo --seasons 2023-2024 --check                 # exit 1 if RPS got worse
+```
+
+Each race is forecast using only data available when qualifying ended ([ADR-0005](docs/adr/0005-backtest-cutoff-and-grid.md)); a model that reads further fails the run.
 
 **Frontend** (in a second terminal)
 

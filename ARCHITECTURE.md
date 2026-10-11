@@ -73,7 +73,7 @@ flowchart LR
 
 **Two hard boundaries:**
 
-- **Data cutoff.** Models only read data from before qualifying ends. A live prediction and a backtest replay run the same code; the backtester just moves the cutoff back in time, and a leakage test fails on any read past it.
+- **Data cutoff.** Models only read data from before qualifying ends. A live prediction and a backtest replay run the same code; the backtester just moves the cutoff back in time, and a leakage guard (`CutoffReader`) fails on any read past it. The exact cutoff and grid rules are in ADR-0005.
 - **Publish boundary.** Raw timing data stays on the machine (ADR-0001). Only derived predictions are published.
 
 ### Repository layout
@@ -92,7 +92,8 @@ Shpeed/
     adapters/
       sources/         # FastF1Adapter, JolpicaAdapter, shared HTTP layer
       store/           # DuckLakeStore, InMemoryStore (tests), pandera schemas, writer lock
-      models/          # baselines, pace, tyres, strategy, overtaking, hazards
+      models/          # baselines and registry, pace, tyres, strategy, overtaking, hazards
+      benchmarks.py    # benchmarks/<model>.json records and the regression gate
       steps/           # lap_time, overtake, pit_stop, safety_car, reliability, lap1
       publishers/      # git_pages, local_file (tests)
     api/               # read-only FastAPI service and its container health check

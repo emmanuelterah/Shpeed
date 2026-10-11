@@ -92,3 +92,35 @@ class PositionMatrix:
             One probability per driver, in ``drivers`` order.
         """
         return self.p_position[:, :k].sum(axis=1)
+
+    def categories(self) -> NDArray[np.float64]:
+        """Every outcome's probability, with DNF as the last, worst category.
+
+        Returns:
+            Array of shape ``(n_drivers, n_drivers + 1)``: positions 1 to n, then DNF.
+        """
+        return np.concatenate([self.p_position, self.p_dnf[:, np.newaxis]], axis=1)
+
+    def smoothed(self, eps: float) -> "PositionMatrix":
+        """Blend with a uniform forecast so that no outcome has probability zero.
+
+        Simulated matrices give zero to outcomes no run produced, which makes log loss
+        infinite. Mixing in a little of the uniform forecast keeps every invariant.
+
+        Args:
+            eps: Weight of the uniform forecast, between 0 and 1.
+
+        Returns:
+            A new matrix; each probability ``p`` becomes ``(1 - eps) p + eps / (n + 1)``.
+
+        Raises:
+            InvariantError: If ``eps`` is outside [0, 1].
+        """
+        if not 0.0 <= eps <= 1.0:
+            raise InvariantError("eps must be between 0 and 1")
+        uniform = 1.0 / (len(self.drivers) + 1)
+        return PositionMatrix(
+            drivers=self.drivers,
+            p_position=(1 - eps) * self.p_position + eps * uniform,
+            p_dnf=(1 - eps) * self.p_dnf + eps * uniform,
+        )
