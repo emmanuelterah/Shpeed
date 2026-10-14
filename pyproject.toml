@@ -52,8 +52,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Statistical models (Phases 3-6). ADR-0003 decides PyMC vs NumPyro.
-models = ["pymc>=5.16", "statsmodels>=0.14"]
+# Statistical models (Phases 3-6): NumPyro on JAX (ADR-0003) and statsmodels.
+models = ["numpyro>=0.18", "jax>=0.5", "statsmodels>=0.14"]
 # Read-only API (Phase 8): `pip install "f1sim[api]"` to run `f1sim.api.app`
 api = ["fastapi>=0.115", "uvicorn>=0.30"]
 
@@ -265,6 +265,8 @@ forbidden_modules = [
   "fastf1",
   "duckdb",
   "pymc",
+  "jax",
+  "statsmodels",
   "numpyro",
   "fastapi",
   "httpx",

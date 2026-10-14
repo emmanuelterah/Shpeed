@@ -21,6 +21,8 @@ from tests.support import SYNTH_DRIVERS, UniformModel, synthetic_results
 
 ENTRIES = tuple(RaceEntry(d, f"team_{i // 2}", i + 1) for i, d in enumerate(SYNTH_DRIVERS))
 EVENT = EventKey(2025, 1)
+BASELINES = ("elo", "grid_noise", "plackett_luce")
+"""Models that learn from results alone; the pace model needs laps (test_pace_model)."""
 
 
 @pytest.fixture(scope="module")
@@ -109,7 +111,7 @@ def test_invalid_hyperparameters_are_rejected() -> None:
 
 
 def test_registry_lists_and_rejects_names() -> None:
-    assert model_names() == ["elo", "grid_noise", "plackett_luce"]
+    assert model_names() == ["elo", "grid_noise", "pace", "plackett_luce"]
     with pytest.raises(DataError):
         get_model("nope")
 
@@ -118,7 +120,7 @@ def test_every_baseline_beats_uniform_and_is_deterministic(store: InMemoryStore)
     snap = store.latest_snapshot()
     uniform = ModelSpec("uniform", UniformModel)
     baseline = walk_forward(store, snapshot=snap, seasons=(2024,), model=uniform).summary()
-    for name in model_names():
+    for name in BASELINES:
         spec = get_model(name)
         first = walk_forward(store, snapshot=snap, seasons=(2024,), model=spec, workers=2)
         again = walk_forward(store, snapshot=snap, seasons=(2024,), model=spec, workers=1)

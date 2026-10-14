@@ -83,16 +83,19 @@ Shpeed/
   src/f1sim/
     core/              # no I/O libraries (enforced by import-linter)
       domain/          # SessionKey, EventKey, RaceState, PositionMatrix
-      ports/           # SourceAdapter, DataWriter, DataReader, Predictor, LapStep, Publisher
+      ports/           # SourceAdapter, DataWriter, DataReader, Predictor, FittedStateStore,
+                       # LapStep, Publisher
       engine/          # Monte Carlo loop over LapSteps
       scoring/         # Brier, RPS, calibration
       usecases/        # sync, backtest, simulate, score, publish
       errors.py
-    resources/         # data shipped in the wheel: team_lineage.yaml
+    resources/         # data shipped in the wheel: team lineage, circuits, engine suppliers
     adapters/
       sources/         # FastF1Adapter, JolpicaAdapter, shared HTTP layer
-      store/           # DuckLakeStore, InMemoryStore (tests), pandera schemas, writer lock
-      models/          # baselines and registry, pace, tyres, strategy, overtaking, hazards
+      store/           # DuckLakeStore, InMemoryStore (tests), pandera schemas, writer lock,
+                       # FileStateStore (fitted model states, atomic writes)
+      models/          # baselines, registry, pace (corrections, filter, NumPyro fit,
+                       # checks, reference); later tyres, strategy, overtaking, hazards
       benchmarks.py    # benchmarks/<model>.json records and the regression gate
       steps/           # lap_time, overtake, pit_stop, safety_car, reliability, lap1
       publishers/      # git_pages, local_file (tests)
@@ -308,7 +311,7 @@ The data pipeline (`f1sim data sync`, `predict`) is not a service: it runs as a 
 | D2 | One predict path, two callers | Backtester and live run share the pipeline, so backtest scores describe the live system |
 | D3 | Rules live in config | `configs/rules/<season>.yaml`; the 2026 reset is a data change, not a code change |
 | D4 | Models hand over draws | The engine samples posteriors, so model uncertainty flows into the matrix |
-| D5 | Fitted state is cached | Weekend updates start from the last posterior; NumPyro or VI if PyMC is too slow (ADR-0003) |
+| D5 | Fitted state is cached | Weekend updates resume from the posterior saved after the last race weekend; the Kalman filter makes each session update exact and fast (ADR-0003, ADR-0006) |
 | D6 | Components earn their place | Merge only if it beats Plackett–Luce on RPS; keep only if the ablation says so |
 | D7 · ADR-0002 | Transactional store on DuckLake | Atomic syncs and snapshot-pinned reads; any forecast can be replayed |
 | D8 | Core owns the interfaces | Heavy libraries live behind small ports; swapping one touches one adapter |
@@ -358,12 +361,12 @@ The data pipeline (`f1sim data sync`, `predict`) is not a service: it runs as a 
 
 ## 12. Stack
 
-Python 3.12 · uv · FastF1 · Jolpica-F1 · DuckLake (DuckDB + Parquet) · pandera · statsmodels · PyMC / NumPyro · NumPy (Numba if needed) · pytest + hypothesis · ruff · pyright · import-linter · FastAPI · Docker · GitHub Actions · GitHub Pages · mkdocs-material · PyPI · React · TypeScript · Vite · pnpm · Vitest · Playwright · Docker Compose · nginx
+Python 3.12 · uv · FastF1 · Jolpica-F1 · DuckLake (DuckDB + Parquet) · pandera · statsmodels · NumPyro (JAX) · NumPy (Numba if needed) · pytest + hypothesis · ruff · pyright · import-linter · FastAPI · Docker · GitHub Actions · GitHub Pages · mkdocs-material · PyPI · React · TypeScript · Vite · pnpm · Vitest · Playwright · Docker Compose · nginx
 
 ## 13. Open questions
 
 - **Where does the API run in production?** Locally it runs in Docker Compose. Publicly, the Pages site can serve the committed JSON on its own, so hosting the API is optional (a small container host if wanted).
-- **PyMC or NumPyro?** Decide at the end of Phase 3 by timing a full weekend update (ADR-0003).
+- **PyMC or NumPyro?** Decided: NumPyro on the exact marginal likelihood, with the Kalman filter for weekend updates (ADR-0003).
 - **OpenF1 as a second source?** Add if FastF1 reliability becomes a problem; otherwise it waits for the in-race stretch goal.
 - **Historical odds?** Optional market benchmark if a clean source turns up.
 

@@ -162,12 +162,19 @@ def _driver_fields(idx: int, grid: int, position: int | None) -> dict[str, Any]:
         "driver_number": idx + 1,
         "team_id": f"team_{idx // 2}",
         "team_name": f"Team {idx // 2}",
+        **classification(grid, position),
+        "laps": 57,
+    }
+
+
+def classification(grid: int, position: int | None) -> dict[str, Any]:
+    """Result columns that follow from grid slot and finishing position (None = retired)."""
+    return {
         "grid": grid,
         "position": position,
         "position_text": "R" if position is None else str(position),
         "status": "Retired" if position is None else "Finished",
         "points": 0.0,
-        "laps": 57,
         "time_s": None,
         "q1_s": None,
         "q2_s": None,
