@@ -15,14 +15,24 @@ from typing import Annotated, Any, cast
 import typer
 
 from f1sim.adapters.benchmarks import check_regression, current_commit, record_run
-from f1sim.adapters.models.registry import get_model, model_names
+from f1sim.adapters.config_files import (
+    load_pace_hyper,
+    load_team_lineage,
+)
+from f1sim.adapters.models.pace import PacePredictor
+from f1sim.adapters.models.pace_checks import predictive_check
+from f1sim.adapters.models.pace_reference import fit_reference, prepare_laps
+from f1sim.adapters.models.pace_training import SamplerSettings, season_observations, train_pace
+from f1sim.adapters.models.registry import ModelOptions, get_model, model_names, pace_context
 from f1sim.adapters.sources.fastf1_adapter import FastF1Adapter, fastf1_loaders
 from f1sim.adapters.sources.http import HttpClient
 from f1sim.adapters.sources.jolpica_adapter import JolpicaAdapter
 from f1sim.adapters.store.ducklake_store import DuckLakeStore
-from f1sim.core.domain.entities import SessionKey, SnapshotId
+from f1sim.adapters.store.state_files import FileStateStore
+from f1sim.core.domain.entities import EventKey, SessionKey, SnapshotId
 from f1sim.core.ports.sources import SourceAdapter
 from f1sim.core.usecases.backtest import BacktestResult, walk_forward
+from f1sim.core.usecases.readers import FAR_FUTURE
 from f1sim.core.usecases.sync import SyncReport, sync_season
 from f1sim.observability import configure_logging
 from f1sim.reports.backtest_report import leaderboard, render_backtest
@@ -32,8 +42,10 @@ from f1sim.settings import Settings
 app = typer.Typer(help="Shpeed F1 race simulator", no_args_is_help=True)
 data_app = typer.Typer(help="Fetch, validate and manage the local data store", no_args_is_help=True)
 report_app = typer.Typer(help="Backtest and scoring reports", no_args_is_help=True)
+pace_app = typer.Typer(help="Fit, check and update the pace model", no_args_is_help=True)
 app.add_typer(data_app, name="data")
 app.add_typer(report_app, name="report")
+app.add_typer(pace_app, name="pace")
 
 SOURCES = ("jolpica", "fastf1")
 BENCHMARKS_DIR = Path("benchmarks")
@@ -355,7 +367,7 @@ def backtest(
                 store,
                 snapshot=snapshot,
                 seasons=years,
-                model=get_model(name),
+                model=get_model(name, _model_options(settings)),
                 seed=settings.seed,
                 workers=workers,
             )
@@ -388,6 +400,172 @@ def _gate_and_record(
         for result in results:
             typer.echo(f"Recorded {record_run(folder, result, commit=commit, seed=seed)}")
     return regressed
+
+
+def _model_options(settings: Settings, *, with_state: bool = False) -> ModelOptions:
+    return ModelOptions(
+        pace_hyper=load_pace_hyper(settings.pace_hyper_path),
+        state_store=FileStateStore(settings.state_dir) if with_state else None,
+    )
+
+
+@pace_app.command("fit", help="Fit the pace model's hyperparameters with NUTS (NumPyro).")
+def pace_fit(
+    ctx: typer.Context,
+    *,
+    seasons: Annotated[str, typer.Option(help="Training seasons, such as 2021-2023")],
+    warmup: Annotated[int, typer.Option(help="NUTS warm-up draws per chain")] = 500,
+    samples: Annotated[int, typer.Option(help="NUTS draws kept per chain")] = 500,
+    chains: Annotated[int, typer.Option(help="NUTS chains (at least 2 for R-hat)")] = 2,
+    out: Annotated[Path | None, typer.Option(help="Where to write the result")] = None,
+    method: Annotated[
+        str, typer.Option(help="nuts (full posterior, R-hat and ESS) or laplace (fast)")
+    ] = "nuts",
+) -> None:
+    """Fit hyperparameters (P3-04, P3-11) and choose race-day noise by backtest.
+
+    Args:
+        ctx: Typer context holding settings.
+        seasons: Training seasons; keep later seasons for ``pace check``.
+        warmup: Warm-up draws per chain.
+        samples: Kept draws per chain.
+        chains: Number of chains.
+        out: Output JSON; defaults to the ``pace_hyper_path`` setting.
+        method: ``nuts`` or ``laplace``.
+
+    Raises:
+        typer.Exit: With status 1 when the fit did not converge.
+    """
+    settings: Settings = ctx.obj["settings"]
+    context = pace_context(_model_options(settings))
+    store = open_store(settings)
+    try:
+        result = train_pace(
+            store,
+            snapshot=store.latest_snapshot(),
+            seasons=parse_seasons(seasons),
+            context=context,
+            sampler=SamplerSettings(warmup, samples, chains, settings.seed, method),
+        )
+    finally:
+        store.close()
+    for name, d in result.fit.diagnostics.items():
+        flag = "" if d.converged or method != "nuts" else "  <- not converged"
+        typer.echo(
+            f"{name:22} {d.median:8.4f} sd {d.sd:.4f}  R-hat {d.r_hat:.3f}  ESS {d.ess:6.0f}{flag}"
+        )
+    typer.echo(f"order_noise {result.fit.hyper.order_noise} (RPS: {result.order_noise_rps})")
+    typer.echo(f"NUTS took {result.fit.seconds:.1f} s for {result.fit.observations} observations")
+    target = out or settings.pace_hyper_path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(result.record(current_commit()), indent=2) + "\n", "utf-8")
+    typer.echo(f"Wrote {target}")
+    if not result.fit.converged:
+        raise typer.Exit(1)
+
+
+@pace_app.command("check", help="Posterior predictive check on held-out seasons.")
+def pace_check(
+    ctx: typer.Context,
+    *,
+    seasons: Annotated[str, typer.Option(help="All seasons to run, such as 2021-2024")],
+    holdout: Annotated[str, typer.Option(help="Held-out seasons, such as 2024")],
+) -> None:
+    """Check that held-out race forecasts are calibrated (P3-11).
+
+    Args:
+        ctx: Typer context holding settings.
+        seasons: Seasons to run the filter over, training and held-out.
+        holdout: Seasons whose races are checked.
+
+    Raises:
+        typer.Exit: With status 1 when the check fails.
+    """
+    settings: Settings = ctx.obj["settings"]
+    context = pace_context(_model_options(settings))
+    store = open_store(settings)
+    try:
+        snapshot = store.latest_snapshot()
+        observations = season_observations(store, snapshot, parse_seasons(seasons), context)
+    finally:
+        store.close()
+    result = predictive_check(observations, context, parse_seasons(holdout))
+    typer.echo(
+        f"{result.sessions} races, {result.drivers} driver forecasts: "
+        f"50% interval holds {result.coverage50:.0%}, 90% holds {result.coverage90:.0%}, "
+        f"z sd {result.z_sd:.2f}, chi-squared ratio {result.chi2_ratio:.2f}"
+    )
+    typer.echo("PASS" if result.passed else "FAIL")
+    if not result.passed:
+        raise typer.Exit(1)
+
+
+@pace_app.command("reference", help="Fit the mixed-effects reference model and report error.")
+def pace_reference(
+    ctx: typer.Context,
+    *,
+    seasons: Annotated[str, typer.Option(help="Seasons, such as 2024")],
+) -> None:
+    """Fit the statsmodels reference model (P3-03) and print held-out lap error.
+
+    Args:
+        ctx: Typer context holding settings.
+        seasons: Seasons whose race laps are used.
+    """
+    settings: Settings = ctx.obj["settings"]
+    store = open_store(settings)
+    try:
+        laps = store.read("laps", snapshot=store.latest_snapshot(), as_of=FAR_FUTURE)
+    finally:
+        store.close()
+    laps = laps.loc[laps["season"].isin(list(parse_seasons(seasons)))]
+    result = fit_reference(prepare_laps(laps, load_team_lineage()), seed=settings.seed)
+    typer.echo(
+        f"Held-out lap error: {result.rmse_pct:.3f}% with team and driver effects, "
+        f"{result.baseline_rmse_pct:.3f}% without ({result.test_laps} laps; "
+        f"trained on {result.train_laps})"
+    )
+    typer.echo(f"Team spread {result.team_sd:.3f}%, driver-within-team {result.driver_sd:.3f}%")
+    for team, value in sorted(result.team_effects.items(), key=lambda kv: kv[1]):
+        typer.echo(f"  {team:16} {value:+.3f}%")
+
+
+@pace_app.command("update", help="Update the pace model with every session so far.")
+def pace_update(ctx: typer.Context, season: Season, round_: Round) -> None:
+    """Weekend update (P3-09): resume from the saved state and add new sessions.
+
+    Args:
+        ctx: Typer context holding settings.
+        season: Season of the weekend.
+        round_: Round of the weekend.
+    """
+    settings: Settings = ctx.obj["settings"]
+    context = pace_context(_model_options(settings, with_state=True))
+    started = _now()
+    store = open_store(settings)
+    try:
+        model = PacePredictor(settings.seed, context)
+        model.fit(store, snapshot=store.latest_snapshot(), cutoff=_now())
+    finally:
+        store.close()
+    seconds = (_now() - started).total_seconds()
+    report = model.report
+    resumed = (
+        f"resumed from {report.resumed_from.season} round {report.resumed_from.round}"
+        if report.resumed_from
+        else "fitted from the first session"
+    )
+    typer.echo(f"{report.sessions} sessions in {seconds:.1f} s ({resumed})")
+    model.filter.advance(season, round_)
+    _print_pace_table(model, EventKey(season, round_))
+
+
+def _print_pace_table(model: PacePredictor, event: EventKey) -> None:
+    typer.echo(f"Pace at {event.season} round {event.round} (percent of lap time; lower is faster)")
+    labels = [lab for lab in model.filter.state.labels if lab.startswith(("team:", "dr:"))]
+    rows = sorted((model.filter.effect(lab), lab) for lab in labels)
+    for (mean, sd), label in rows:
+        typer.echo(f"  {label:32} {mean:+.3f} +/- {sd:.3f}")
 
 
 @report_app.command("score", help="Score a published prediction against the official result.")

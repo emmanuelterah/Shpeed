@@ -1,0 +1,41 @@
+# Power-unit supplier per team and season (P3-08), keyed by Jolpica constructor ID.
+# The pace model nests team pace under supplier pace, so customer teams share part of
+# their works team's engine performance. A team missing for a season is its own supplier.
+#
+# Supplier IDs group badge changes: "honda" covers Honda, Red Bull Powertrains (RBPT) and
+# Honda RBPT, which were the same engine. 2026 entries follow the announced deals; confirm
+# the constructor IDs after the first 2026 sync.
+
+defaults:
+  mercedes: mercedes
+  ferrari: ferrari
+  williams: mercedes
+  haas: ferrari
+  force_india: mercedes
+  racing_point: mercedes
+  aston_martin: mercedes
+  sauber: ferrari
+  alfa: ferrari
+  renault: renault
+  alpine: renault
+  red_bull: honda
+  toro_rosso: honda
+  alphatauri: honda
+  rb: honda
+  mclaren: mercedes
+
+seasons:
+  2018:
+    red_bull: renault
+    mclaren: renault
+  2019:
+    mclaren: renault
+  2020:
+    mclaren: renault
+  2026:
+    red_bull: red_bull_ford
+    rb: red_bull_ford
+    alpine: mercedes
+    aston_martin: honda
+    audi: audi
+    cadillac: ferrari

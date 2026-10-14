@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Changed
+- The `models` extra now installs NumPyro and JAX instead of PyMC (ADR-0003), plus statsmodels.
+- `get_model` takes `ModelOptions` (pace hyperparameters, fitted-state store).
 - Data dependencies (FastF1, DuckDB, pandera, httpx and others) are now core dependencies, so
   `pip install f1sim` gives a working CLI. The `data` extra is gone; `models` and `api` remain.
 - The team lineage table moved into the package (`f1sim/resources/`), so it loads after a
@@ -13,6 +15,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - `HttpClient` retry settings are grouped into a `RetryPolicy`.
 
 ### Added
+- Phase 3 pace model (P3-01 to P3-12, except the engine clipping feature in P3-08):
+  - fuel effect per circuit and track evolution per session, pooled with earlier sessions at
+    the same circuit; corrected pace observations from qualifying, races, sprints and
+    practice long runs;
+  - circuit speed clusters from lap length and qualifying speed, and an engine-supplier
+    table (`f1sim/resources/circuits.yaml`, `engine_suppliers.yaml`);
+  - Bayesian state-space pace model: team random walk, supplier, team quali offset, team x
+    cluster and correlated driver quali/race effects, updated exactly by a Kalman filter;
+  - hyperparameters fitted by NUTS (or a Laplace approximation) in NumPyro on the exact
+    marginal likelihood, with R-hat, ESS and a posterior predictive check on held-out races;
+  - statsmodels mixed-effects reference model with held-out lap error;
+  - versioned, atomic fitted-state store (`FittedStateStore` port, `FileStateStore`), so a
+    weekend update resumes from the last race weekend instead of refitting;
+  - `pace` predictor registered for backtests; `f1sim pace fit | check | reference | update`;
+  - ADR-0003 accepted (NumPyro) and ADR-0006 (pace model design).
 - Phase 2 baselines and evaluation harness (P2-01 to P2-14, except the market benchmark P2-11):
   - `Predictor` port now takes the race entries, plus `ModelSpec` and `PredictorFactory` so a
     backtest builds a fresh, seeded model per race;
