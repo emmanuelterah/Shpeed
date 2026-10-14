@@ -21,6 +21,8 @@ class Settings(BaseSettings):
         sim_time_budget_s: Time budget for one race simulation, in seconds.
         predictions_dir: Where published prediction records are read and written.
         cors_origins: Browser origins allowed to call the API directly.
+        pace_hyper_path: Fitted pace-model hyperparameters written by ``f1sim pace fit``;
+            the built-in defaults are used while the file does not exist.
     """
 
     model_config = SettingsConfigDict(env_prefix="F1SIM_", env_file=".env", extra="ignore")
@@ -33,3 +35,13 @@ class Settings(BaseSettings):
     sim_time_budget_s: float = 60.0
     predictions_dir: Path = Path("predictions")
     cors_origins: list[str] = []
+    pace_hyper_path: Path = Path("configs/pace_hyper.json")
+
+    @property
+    def state_dir(self) -> Path:
+        """Folder for fitted model states (P3-10).
+
+        Returns:
+            ``<data_dir>/state``.
+        """
+        return self.data_dir / "state"

@@ -4,7 +4,7 @@
 
 Before each Grand Prix, Shpeed simulates the race lap by lap, thousands of times. Each run samples car pace, tyre wear, pit strategy, overtakes, safety cars and retirements. From the outcomes it computes the probability of every driver finishing in every position. After the race, it scores that forecast against the official result in public.
 
-> **Project status: Phase 2 of 10 (baselines and evaluation).** The foundations, read-only API, web app shell, Docker setup, the data pipeline, three baseline models and the walk-forward backtester are built and tested offline. The first sync against the live data sources and the first real backtest scores come next, then the simulation models, so there are no real forecasts yet. See [What works today](#what-works-today) and [ROADMAP.md](ROADMAP.md).
+> **Project status: Phase 3 of 10 (pace model).** The foundations, read-only API, web app shell, Docker setup, the data pipeline, three baseline models, the walk-forward backtester and the Bayesian pace model are built and tested offline. The first sync against the live data sources and the first real scores come next, then tyres, strategy and the lap-by-lap simulator, so there are no real forecasts yet. See [What works today](#what-works-today) and [ROADMAP.md](ROADMAP.md).
 >
 > Shpeed is an unofficial project. It is not associated with Formula 1, the FIA or any team.
 
@@ -92,7 +92,8 @@ The full design (components, boundaries, data flow and decisions) is in [ARCHITE
 | Docker Compose stack (API + web), with a hot-reload development mode | ✅ In place |
 | Data ingestion: `f1sim data sync`, `verify`, `report`, `gc` | ✅ Built and tested offline; first live sync pending |
 | Baselines (grid + noise, Elo, Plackett–Luce) and the walk-forward backtester: `f1sim backtest` with leakage guard, report, benchmark records and regression gate | ✅ Built and tested on synthetic seasons; real scores need a live sync |
-| Pace, tyre, strategy and event models; Monte Carlo engine | 🔜 Phases 3–6 |
+| Pace model: fuel and track-evolution corrections, Bayesian team, engine and driver pace updated after every session (`f1sim pace fit`, `check`, `reference`, `update`), registered as the `pace` predictor | ✅ Built and tested on synthetic seasons; hyperparameters need fitting on real data |
+| Tyre, strategy and event models; Monte Carlo engine | 🔜 Phases 4–6 |
 | Automated race-weekend forecasts | 🔜 Phase 8 |
 | Public v1.0 with live forecasts | 🔜 Phase 9, targeted for the 2027 season opener |
 
@@ -152,6 +153,19 @@ uv run f1sim backtest --model elo --seasons 2023-2024 --check                 # 
 ```
 
 Each race is forecast using only data available when qualifying ended ([ADR-0005](docs/adr/0005-backtest-cutoff-and-grid.md)); a model that reads further fails the run.
+
+**Fit and check the pace model** (needs the `models` extra: `uv sync --extra models`):
+
+```bash
+uv run f1sim pace fit --seasons 2021-2023                     # NUTS; writes configs/pace_hyper.json
+uv run f1sim pace fit --seasons 2021-2023 --method laplace    # much faster approximation
+uv run f1sim pace check --seasons 2021-2024 --holdout 2024    # calibration on held-out races
+uv run f1sim pace reference --seasons 2024                    # mixed-effects sanity check
+uv run f1sim pace update --season 2025 --round 5              # weekend update from the saved state
+uv run f1sim backtest --model pace,plackett_luce --seasons 2024
+```
+
+The model and its design choices are described in [ADR-0006](docs/adr/0006-pace-model.md).
 
 **Frontend** (in a second terminal)
 

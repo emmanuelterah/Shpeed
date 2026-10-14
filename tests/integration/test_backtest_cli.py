@@ -7,6 +7,7 @@ from typer.testing import CliRunner
 
 from f1sim import cli
 from f1sim.adapters.benchmarks import load_runs
+from f1sim.adapters.models.registry import model_names
 from f1sim.adapters.store.ducklake_store import DuckLakeStore
 from tests.support import synthetic_results
 
@@ -44,7 +45,7 @@ def test_backtest_reports_records_and_gates(workdir: Path) -> None:
 
     gated = runner.invoke(cli.app, [*args, "--check"])
     assert gated.exit_code == 0, gated.output
-    assert gated.output.count("(ok)") == 3
+    assert gated.output.count("(ok)") == len(model_names())
 
 
 def test_gate_fails_on_a_regression(workdir: Path) -> None:
