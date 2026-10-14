@@ -1,0 +1,47 @@
+# Circuit reference data (P3-06), keyed by Jolpica circuit ID.
+#
+# length_km is the lap length of the current layout, rounded; it is only used to turn the
+# best qualifying lap into an average speed, which places the circuit in a speed cluster.
+# Small layout changes (Barcelona 2023, Singapore 2023, Abu Dhabi 2021) move the average
+# speed by a few km/h at most, which does not change a cluster.
+#
+# Clusters are average qualifying speed bands, in km/h: below `low_below` is "low"
+# (Monaco, Singapore, Hungary), at or above `high_from` is "high" (Monza, Spa, Silverstone).
+
+clusters:
+  low_below: 210
+  high_from: 235
+
+circuits:
+  albert_park: 5.278
+  americas: 5.513
+  bahrain: 5.412
+  baku: 6.003
+  catalunya: 4.657
+  hockenheimring: 4.574
+  hungaroring: 4.381
+  imola: 4.909
+  interlagos: 4.309
+  istanbul: 5.338
+  jeddah: 6.174
+  losail: 5.419
+  madring: 5.474
+  marina_bay: 4.940
+  miami: 5.412
+  monaco: 3.337
+  monza: 5.793
+  mugello: 5.245
+  nurburgring: 5.148
+  portimao: 4.653
+  red_bull_ring: 4.318
+  ricard: 5.842
+  rodriguez: 4.304
+  shanghai: 5.451
+  silverstone: 5.891
+  sochi: 5.848
+  spa: 7.004
+  suzuka: 5.807
+  vegas: 6.201
+  villeneuve: 4.361
+  yas_marina: 5.281
+  zandvoort: 4.259
