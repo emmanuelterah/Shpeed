@@ -111,7 +111,7 @@ def test_invalid_hyperparameters_are_rejected() -> None:
 
 
 def test_registry_lists_and_rejects_names() -> None:
-    assert model_names() == ["elo", "grid_noise", "pace", "plackett_luce"]
+    assert model_names() == ["elo", "grid_noise", "pace", "plackett_luce", "simulator"]
     with pytest.raises(DataError):
         get_model("nope")
 

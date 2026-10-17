@@ -15,7 +15,7 @@ from f1sim.core.ports.predictor import ModelSpec, Predictor
 from f1sim.core.ports.store import DataReader
 from f1sim.core.usecases.backtest import BacktestResult, plan_races, race_seed, walk_forward
 from f1sim.core.usecases.readers import FAR_FUTURE, CutoffReader, FrameReader, as_naive_utc
-from tests.support import UniformModel, synthetic_results
+from tests.support import UniformModel, lap_rows, synthetic_results
 
 
 def _store(
@@ -113,6 +113,27 @@ def test_plan_uses_qualifying_cutoff_and_grid() -> None:
     assert first.cutoff == datetime(2024, 3, 1, 15, 0)
     assert [e.grid for e in first.entries] == list(range(1, 11))
     assert len(first.classified) <= 10
+
+
+def _with_quali_laps(available_at: datetime) -> tuple[InMemoryStore, SnapshotId]:
+    """One weekend whose results guess the qualifying time but whose laps know it."""
+    results = synthetic_results(seasons=(2024,), rounds=1)
+    laps = lap_rows(season=2024, round_=1, session="Q", available_at=available_at)
+    store = InMemoryStore()
+    return store, store.commit({"results": results, "laps": laps}, run_id="t")
+
+
+def test_lap_timing_moves_a_guessed_cutoff_to_the_real_session_end() -> None:
+    real_end = datetime(2024, 3, 1, 22, 30)
+    store, snap = _with_quali_laps(real_end)
+    plan = plan_races(store, snap, [2024])[0][0]
+    assert plan.cutoff == real_end
+
+
+def test_lap_timing_never_moves_the_cutoff_past_the_race() -> None:
+    store, snap = _with_quali_laps(datetime(2024, 3, 5, 12, 0))
+    plan = plan_races(store, snap, [2024])[0][0]
+    assert plan.cutoff == datetime(2024, 3, 1, 15, 0)
 
 
 def test_sprint_sets_the_grid_in_2021_and_2022_only() -> None:

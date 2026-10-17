@@ -322,6 +322,15 @@ def _fit_distribution(values: Sequence[float]) -> StopTimeDistribution | None:
     return StopTimeDistribution(mu, fast_sigma, fraction, scale)
 
 
+def default_stop_times() -> StopTimeModel:
+    """A league-wide stop-duration model for when no stops have been recorded.
+
+    Returns:
+        No team distributions, and the default distribution for everyone.
+    """
+    return StopTimeModel({}, _default_distribution())
+
+
 def _default_distribution() -> StopTimeDistribution:
     return StopTimeDistribution(mu=24.0, sigma=1.5, slow_fraction=0.05, slow_scale=8.0)
 

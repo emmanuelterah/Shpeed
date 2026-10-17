@@ -18,6 +18,9 @@ The simulator needs each car and driver's underlying pace, with honest uncertain
 
 Sessions are processed in time order and pool only with earlier sessions, so no observation depends on anything after it.
 
+- *Unidentifiable compounds:* a compound run only by drivers who ran nothing else cannot be separated from those drivers' levels, so the least-used compound is dropped and the session refitted, rather than the whole session being discarded (this lost 23% of 2021–2022 practice sessions and some dry qualifying and races).
+- *Outlying drivers:* a driver more than four robust standard deviations (floored at 0.25%) from the session median is left out of that session's observation. A single compromised lap (an aborted lap, a red flag, a drying track) put drivers 5–44% off the field, which with Gaussian noise either polluted the driver and team effects or, once fitted, made qualifying look like pure noise.
+
 **Model.** With all quantities in percent:
 
 `pace = team + supplier + team x cluster + (quali: team quali offset + driver quali | race: driver race) + session level + noise`
@@ -32,6 +35,8 @@ Sessions are processed in time order and pool only with earlier sessions, so no 
 Once the hyperparameters are fixed, the model is linear and Gaussian, so the posterior over all latent effects is exact and a Kalman filter updates it one session at a time.
 
 **Weekend updates.** After each race weekend, the posterior and the fuel and evolution history are saved, keyed by model version, weekend and snapshot, with a fingerprint of the laps they came from. The next update resumes from that state if the fingerprint still matches, and only processes the new sessions.
+
+**Fitted hyperparameters.** `configs/pace_hyper.json` holds the NUTS fit on 2021 (all R-hat ≤ 1.003): qualifying noise 0.35%, race noise 0.38%, practice noise 3.8% (long runs carry little), driver qualifying–race correlation 0.88, and race-day noise 0.45% chosen by backtest. Before the two observation fixes, the same fit put qualifying noise at 3.4% and the correlation at −0.34. `MODEL_VERSION` is 2, so states saved by the old observation code are not reused.
 
 **Race forecast.** The `pace` predictor samples race pace from the posterior, adds race-day noise (`order_noise`, chosen by backtest), and ranks. Retirements use the historical rate until Phase 6 adds hazards.
 

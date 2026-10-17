@@ -6,12 +6,16 @@ registry pick it up by name.
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 from f1sim.adapters.config_files import load_circuits, load_engine_suppliers, load_team_lineage
 from f1sim.adapters.models.baselines import Elo, GridNoise, PlackettLuce
+from f1sim.adapters.models.common import N_SIMS
 from f1sim.adapters.models.pace import TABLES as PACE_TABLES
 from f1sim.adapters.models.pace import PaceContext, PacePredictor
 from f1sim.adapters.models.pace_filter import PaceHyper
+from f1sim.adapters.models.simulator import TABLES as SIMULATOR_TABLES
+from f1sim.adapters.models.simulator import SimulatorContext, SimulatorPredictor
 from f1sim.core.errors import DataError
 from f1sim.core.ports.predictor import ModelSpec, Predictor
 from f1sim.core.ports.state import FittedStateStore
@@ -24,10 +28,14 @@ class ModelOptions:
     Attributes:
         pace_hyper: Pace-model hyperparameters; the built-in defaults when None.
         state_store: Where the pace model saves and resumes fitted states.
+        rules_dir: Folder holding ``<season>.yaml`` season-rules files, for the simulator.
+        n_sims: Simulated races per forecast for the simulator; its default when None.
     """
 
     pace_hyper: PaceHyper | None = None
     state_store: FittedStateStore | None = None
+    rules_dir: Path | None = None
+    n_sims: int | None = None
 
 
 def pace_context(options: ModelOptions) -> PaceContext:
@@ -74,11 +82,26 @@ def _pace(options: ModelOptions) -> ModelSpec:
     return ModelSpec(PacePredictor.name, _build, PACE_TABLES)
 
 
+def _simulator(options: ModelOptions) -> ModelSpec:
+    context = SimulatorContext(
+        pace=pace_context(options),
+        circuits=load_circuits(),
+        rules_dir=options.rules_dir,
+        n_sims=options.n_sims if options.n_sims is not None else N_SIMS,
+    )
+
+    def _build(seed: int) -> Predictor:
+        return SimulatorPredictor(seed, context)
+
+    return ModelSpec(SimulatorPredictor.name, _build, SIMULATOR_TABLES)
+
+
 _MODELS: dict[str, Callable[[ModelOptions], ModelSpec]] = {
     GridNoise.name: _grid_noise,
     Elo.name: _elo,
     PlackettLuce.name: _plackett_luce,
     PacePredictor.name: _pace,
+    SimulatorPredictor.name: _simulator,
 }
 
 

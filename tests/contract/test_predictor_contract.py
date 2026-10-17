@@ -10,45 +10,31 @@ from f1sim.core.domain.prediction import PositionMatrix
 from f1sim.core.domain.race import RaceEntry
 from f1sim.core.ports.predictor import PredictorFactory
 from f1sim.core.usecases.readers import FAR_FUTURE
-from tests.pace_world import build_world
+from tests.pace_world import quali_entries, world_store
 from tests.unit.test_pace_model import FITTED
 
 pytestmark = pytest.mark.contract
 
-MODELS = ("grid_noise", "elo", "plackett_luce", "pace")
+MODELS = ("grid_noise", "elo", "plackett_luce", "pace", "simulator")
 EVENT = EventKey(2024, 4)
 
 
 @pytest.fixture(scope="module")
 def store() -> InMemoryStore:
     """One synthetic season committed as a single snapshot."""
-    world = build_world(seasons=(2024,), rounds=4)
-    committed = InMemoryStore()
-    committed.commit(world.tables, run_id="world")
-    return committed
+    return world_store()
 
 
 @pytest.fixture(params=MODELS)
 def factory(request: pytest.FixtureRequest) -> PredictorFactory:
     """Each registered model in turn; every test below runs against all of them."""
-    if request.param == "pace":
-        return get_model("pace", ModelOptions(pace_hyper=FITTED)).factory
+    if request.param in {"pace", "simulator"}:
+        return get_model(request.param, ModelOptions(pace_hyper=FITTED)).factory
     return get_model(request.param).factory
 
 
 def _entries(store: InMemoryStore, round_: int) -> list[RaceEntry]:
-    results = store.read("results", snapshot=store.latest_snapshot(), as_of=FAR_FUTURE)
-    quali = results.loc[
-        (results["season"] == EVENT.season)
-        & (results["round"] == round_)
-        & (results["session"] == "Q")
-    ].sort_values("position")
-    return [
-        RaceEntry(str(driver), str(team), slot)
-        for slot, (driver, team) in enumerate(
-            zip(quali["driver_id"], quali["team_id"], strict=True), start=1
-        )
-    ]
+    return quali_entries(store, EventKey(EVENT.season, round_))
 
 
 def test_name_is_a_non_empty_string(factory: PredictorFactory) -> None:

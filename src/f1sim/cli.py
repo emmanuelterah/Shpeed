@@ -429,6 +429,8 @@ def _model_options(settings: Settings, *, with_state: bool = False) -> ModelOpti
     return ModelOptions(
         pace_hyper=load_pace_hyper(settings.pace_hyper_path),
         state_store=FileStateStore(settings.state_dir) if with_state else None,
+        rules_dir=settings.rules_dir,
+        n_sims=settings.n_sims,
     )
 
 

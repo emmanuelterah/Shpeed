@@ -18,11 +18,13 @@ class RaceEntry:
         driver_id: Jolpica driver ID.
         team_id: Jolpica constructor ID.
         grid: Expected starting position, from 1 (see ADR-0005 for how it is chosen).
+        pit_lane: Whether the car starts from the pit lane rather than its grid slot (P5-08).
     """
 
     driver_id: str
     team_id: str
     grid: int
+    pit_lane: bool = False
 
 
 def encode_outcome(

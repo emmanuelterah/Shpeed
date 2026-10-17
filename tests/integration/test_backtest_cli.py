@@ -13,12 +13,17 @@ from tests.support import synthetic_results
 
 pytestmark = pytest.mark.integration
 
+RULES_DIR = Path(__file__).resolve().parents[2] / "configs" / "rules"
+"""The repository's season rules; the simulator reads them and the test runs elsewhere."""
+
 
 @pytest.fixture
 def workdir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """A working folder with a DuckLake store holding two synthetic seasons."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("F1SIM_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("F1SIM_RULES_DIR", str(RULES_DIR))
+    monkeypatch.setenv("F1SIM_N_SIMS", "300")
     store = DuckLakeStore(tmp_path / "data" / "lake")
     try:
         store.commit({"results": synthetic_results(seasons=(2023, 2024), rounds=6)}, run_id="t")
