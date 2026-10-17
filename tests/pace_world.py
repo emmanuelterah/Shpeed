@@ -13,6 +13,10 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from f1sim.adapters.store.memory_store import InMemoryStore
+from f1sim.core.domain.entities import EventKey
+from f1sim.core.domain.race import RaceEntry
+from f1sim.core.usecases.readers import FAR_FUTURE
 from tests.support import classification
 
 TEAMS = ("mercedes", "ferrari", "red_bull", "mclaren", "williams")
@@ -237,3 +241,27 @@ def _tyre(stint: int, compound: str, life: float, clean: bool) -> dict[str, Any]
 
 def _timing(start: datetime, available_at: datetime) -> dict[str, Any]:
     return {"lap_start_utc": start, "available_at": available_at}
+
+
+def world_store(seasons: tuple[int, ...] = (2024,), rounds: int = 4) -> InMemoryStore:
+    """A synthetic championship committed to an in-memory store as one snapshot."""
+    world = build_world(seasons=seasons, rounds=rounds)
+    committed = InMemoryStore()
+    committed.commit(world.tables, run_id="world")
+    return committed
+
+
+def quali_entries(store: InMemoryStore, event: EventKey) -> list[RaceEntry]:
+    """Race entries for one weekend, on the grid in qualifying order."""
+    results = store.read("results", snapshot=store.latest_snapshot(), as_of=FAR_FUTURE)
+    quali = results.loc[
+        (results["season"] == event.season)
+        & (results["round"] == event.round)
+        & (results["session"] == "Q")
+    ].sort_values("position")
+    return [
+        RaceEntry(str(driver), str(team), slot)
+        for slot, (driver, team) in enumerate(
+            zip(quali["driver_id"], quali["team_id"], strict=True), start=1
+        )
+    ]

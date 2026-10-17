@@ -205,6 +205,39 @@ class WarmupModel:
         return values[index]
 
 
+@dataclass(frozen=True)
+class SampledLoss:
+    """Lap-time loss drawn per simulation, ready for the engine (P5-03).
+
+    The strategy and pace models work with point estimates; the engine needs whole loss curves,
+    one draw per simulated race, so that uncertainty in degradation is felt in the forecast.
+
+    Attributes:
+        compounds: Compound names; index ``k`` addresses ``values[k]``.
+        values: Array of shape ``(n_compounds, n_sims, len(AGE_GRID))``, seconds, zero at age 0.
+    """
+
+    compounds: tuple[str, ...]
+    values: NDArray[np.float64]
+
+    def compound_index(self, compound: str) -> int:
+        """Position of a compound in ``compounds``.
+
+        Args:
+            compound: Compound name.
+
+        Returns:
+            The index used to address ``values``.
+
+        Raises:
+            InvariantError: If the compound was not sampled.
+        """
+        try:
+            return self.compounds.index(compound)
+        except ValueError as error:
+            raise InvariantError(f"compound {compound!r} was not sampled") from error
+
+
 @dataclass
 class TyreModel:
     """Everything the strategy and engine need about tyres and stops (P4-01 to P4-05).
@@ -297,6 +330,46 @@ class TyreModel:
             Seconds; negative for a team that stops faster than the field.
         """
         return self.stops.distribution(team).mean() - self.stops.default.mean()
+
+    def sample_loss(
+        self,
+        rng: np.random.Generator,
+        n_sims: int,
+        *,
+        circuit: str | None = None,
+        compounds: Sequence[str] | None = None,
+    ) -> SampledLoss:
+        """Draw whole loss curves, one per simulation, for the engine (P5-03).
+
+        Each age's loss is its fitted value plus Gaussian noise scaled by the curve's standard
+        error, so a compound whose curve is well measured barely moves. Warm-up ages are held
+        out of the fit and so are drawn without noise, and no loss may go below zero.
+
+        Args:
+            rng: Random generator.
+            n_sims: Number of draws per compound.
+            circuit: Circuit ID for the circuit's curved curve; None uses the global curve.
+            compounds: Compounds to sample; defaults to every compound with a global curve.
+
+        Returns:
+            The sampled loss curves.
+
+        Raises:
+            InvariantError: If a requested compound has no curve.
+        """
+        names = tuple(compounds) if compounds is not None else self.degradation.compounds
+        values = np.empty((len(names), n_sims, AGE_GRID.shape[0]), dtype=np.float64)
+        for k, compound in enumerate(names):
+            curve = self.degradation.curve(compound, circuit)
+            mean = np.array(
+                [self.loss(compound, circuit, float(age)) for age in AGE_GRID], dtype=np.float64
+            )
+            se = curve.se.copy()
+            se[:WARMUP_LAPS] = 0.0
+            draws = mean[np.newaxis, :] + rng.standard_normal((n_sims, AGE_GRID.shape[0])) * se
+            draws[:, 0] = 0.0
+            values[k] = np.clip(draws, 0.0, None)
+        return SampledLoss(names, values)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialise the fitted model for the state store.

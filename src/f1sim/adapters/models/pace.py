@@ -35,7 +35,7 @@ from f1sim.core.ports.state import FittedStateStore, StateKey
 from f1sim.core.ports.store import DataReader
 
 MODEL_NAME = "pace"
-MODEL_VERSION = "1"
+MODEL_VERSION = "2"
 """Bump when the observation or filter code changes, so old saved states are not reused."""
 
 TABLES = ("results", "laps", "events")

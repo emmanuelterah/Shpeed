@@ -105,7 +105,10 @@ def plan_races(
     """Find every scorable race in some seasons and what was known before each.
 
     Planning reads results with no cutoff because it is the evaluator, not a model;
-    models only ever see data through the ``CutoffReader`` built from each plan.
+    models only ever see data through the ``CutoffReader`` built from each plan. The cutoff
+    is the latest moment any source records for the weekend's pre-race sessions ending, from
+    the results and from the lap timing (ADR-0005): one source may know only the date of a
+    session and guess its time, which would otherwise hide that session from the models.
 
     Args:
         reader: The data store.
@@ -117,6 +120,7 @@ def plan_races(
     """
     results = reader.read("results", snapshot=snapshot, as_of=FAR_FUTURE)
     results = results.loc[results["season"].isin(list(seasons))]
+    session_ends = _session_ends(reader.read("laps", snapshot=snapshot, as_of=FAR_FUTURE))
     plans: list[RacePlan] = []
     skipped: list[SkippedRace] = []
     races = results.loc[results["session"] == "R", ["season", "round"]].drop_duplicates()
@@ -125,7 +129,7 @@ def plan_races(
         weekend: pd.DataFrame = results.loc[
             (results["season"] == event.season) & (results["round"] == event.round)
         ]
-        plan = _plan_one(event, weekend)
+        plan = _plan_one(event, weekend, session_ends.get((event.season, event.round)))
         if isinstance(plan, SkippedRace):
             skipped.append(plan)
         else:
@@ -159,7 +163,7 @@ def walk_forward(
         LeakageError: If the model reads past a race's cutoff.
         InvariantError: If the model returns rows that do not match the entries.
     """
-    tables = tuple(dict.fromkeys(("results", *model.tables)))
+    tables = tuple(dict.fromkeys(("results", "laps", *model.tables)))
     frames = FrameReader.load(reader, snapshot, tables)
     plans, skipped = plan_races(frames, snapshot, seasons)
     run_one = _race_runner(frames, snapshot, model.factory, seed)
@@ -208,7 +212,26 @@ def _race_runner(
     return _run
 
 
-def _plan_one(event: EventKey, weekend: pd.DataFrame) -> RacePlan | SkippedRace:
+def _session_ends(laps: pd.DataFrame) -> dict[tuple[int, int], datetime]:
+    """When the lap timing says each weekend's last pre-race session ended."""
+    if laps.empty:
+        return {}
+    pre = laps.loc[laps["session"].isin(list(PRE_RACE_SESSIONS))]
+    ends: dict[tuple[int, int], datetime] = {}
+    moments = pd.to_datetime(pre["available_at"]).tolist()
+    for season, round_, moment in zip(
+        pre["season"].tolist(), pre["round"].tolist(), moments, strict=True
+    ):
+        key = (int(season), int(round_))
+        when = pd.Timestamp(moment).to_pydatetime()
+        if key not in ends or when > ends[key]:
+            ends[key] = when
+    return ends
+
+
+def _plan_one(
+    event: EventKey, weekend: pd.DataFrame, timing_end: datetime | None
+) -> RacePlan | SkippedRace:
     pre = weekend.loc[weekend["session"].isin(list(PRE_RACE_SESSIONS))]
     if pre.empty:
         return SkippedRace(event, "no qualifying or sprint results before the race")
@@ -224,6 +247,9 @@ def _plan_one(event: EventKey, weekend: pd.DataFrame) -> RacePlan | SkippedRace:
         if not pd.isna(p)
     )
     cutoff = pd.Timestamp(pre["available_at"].max()).to_pydatetime()
+    race_known = pd.Timestamp(pd.to_datetime(race["available_at"]).min()).to_pydatetime()
+    if timing_end is not None and timing_end < race_known:
+        cutoff = max(cutoff, timing_end)
     return RacePlan(event, cutoff, entries, classified)
 
 
