@@ -31,6 +31,7 @@ def fake_session(
     safety_car_lap: int | None = 4,
     red_flag_lap: int | None = None,
     drop_driver_id: bool = False,
+    drop_lap_start_date: bool = False,
 ) -> FakeSession:
     """Build a two-driver session with a pit stop, and optionally a safety car or red flag."""
     t0 = pd.Timestamp(start) - pd.Timedelta(minutes=55)
@@ -61,9 +62,9 @@ def fake_session(
                     "FreshTyre": True,
                     "Team": team,
                     "LapStartTime": pd.Timedelta(minutes=55) + (lap - 1) * pd.Timedelta(seconds=95),
-                    "LapStartDate": t0
-                    + pd.Timedelta(minutes=55)
-                    + (lap - 1) * pd.Timedelta(seconds=95),
+                    "LapStartDate": pd.NaT
+                    if drop_lap_start_date
+                    else t0 + pd.Timedelta(minutes=55) + (lap - 1) * pd.Timedelta(seconds=95),
                     "TrackStatus": status,
                     "Position": 1.0 if code == "VER" else 2.0,
                     "Deleted": None,

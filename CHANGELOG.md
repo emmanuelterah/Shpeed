@@ -27,13 +27,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   and `f1sim data verify` compares against the right rows (P1-10, P1-14).
 - Jolpica session listings put a sprint before qualifying on a sprint weekend.
 - The test network guard allows loopback sockets, so the API tests run on Windows.
+- Pit losses, team stop tendencies and pit-window comparisons use only race-session stops, so
+  practice and qualifying stops no longer shift them.
+- A held-out stint error with no measurable stints is NaN and fails the Phase 4 gate instead of
+  passing on a zero, and pit windows are matched to actual stops by stop index rather than
+  position, so a missing stop cannot shift the later windows.
+- FastF1 laps were stored with no start time and the weather, track-status and race-control
+  timestamps were anchored at 1970-01-01: FastF1 fills `LapStartDate` (and its session time
+  zero) only when telemetry is loaded, and the old conversion derived the zero from that same
+  missing date. The adapter now falls back to the session's scheduled start, so every timing
+  column shares one clock; this repairs the timeline and re-activates the Phase 3
+  track-evolution term and the Phase 4 temperature term.
 
 ### Added
+- `f1sim data sync --force` re-fetches and replaces sessions already stored, so a change in
+  how a source's data is converted can be republished.
 - Phase 4 tyres and pit strategy (P4-01 to P4-10):
   - pooled per-compound degradation curves with a spline that bends up into a cliff, shrunk
     per circuit toward the global shape (P4-01);
   - a warm-up penalty on the first two laps of a stint, held out of the fit (P4-02), and an
-    optional track-temperature interaction kept only if it improves held-out error (P4-03);
+    optional track-temperature interaction kept only if it improves held-out error, exposed
+    through a `--temperature` flag that picks the winner (P4-03);
   - pit loss per circuit measured from the in- and out-laps (it already includes the stop,
     P4-04) and a per-team pit-lane stop-duration distribution with a slow-stop tail (P4-05);
   - season rules in `configs/rules/<season>.yaml` (2018-2026) validated by `SeasonRules` and
@@ -44,7 +58,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   - a pit-window calibration report, the Phase 4 gate: windows are the chooser's mean stop lap
     widened by a stop-lap spread learned from training residuals, and the report measures the
     share of actual stops inside them per circuit (P4-10);
-  - `f1sim tyres fit | check | windows` and ADR-0007 (tyres and strategy design).
+  - `f1sim tyres fit | check | windows`, a `load_tyre_model` readback of the fitted model, and
+    ADR-0007 (tyres and strategy design).
 - Domain entities for the F1 data (P1-01): frozen `Season`, `Event`, `Session`, `Driver`,
   `Team`, `Lap`, `Stint`, `PitStop`, `TrackStatus`, `RaceControl`, `Result` and `Standing`
   value objects, each buildable from its canonical table row.

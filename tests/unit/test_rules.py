@@ -58,6 +58,12 @@ def test_missing_season_file_raises() -> None:
         load_season_rules(1990, RULES_DIR)
 
 
+def test_malformed_yaml_raises_data_error(tmp_path: Path) -> None:
+    (tmp_path / "2020.yaml").write_text("season: [unclosed", encoding="utf-8")
+    with pytest.raises(DataError):
+        load_season_rules(2020, tmp_path)
+
+
 def test_file_naming_another_season_raises(tmp_path: Path) -> None:
     (tmp_path / "2020.yaml").write_text(yaml.safe_dump(_rules(season=2019)), encoding="utf-8")
     with pytest.raises(ValidationError):
