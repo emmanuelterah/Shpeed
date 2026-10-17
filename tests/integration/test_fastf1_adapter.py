@@ -34,8 +34,19 @@ def test_race_laps_weather_and_track_status_validate() -> None:
     adapter = _adapter({(2024, 1, "R"): fake_session()})
     tables = adapter.fetch(RACE)
     laps = validate("laps", tables["laps"])
+    stints = validate("stints", tables["stints"])
     validate("weather", tables["weather"])
     status = validate("track_status", tables["track_status"])
+    control = validate("race_control", tables["race_control"])
+
+    assert stints[["start_lap", "end_lap"]].values.tolist() == [
+        [1, 3],
+        [4, 6],
+        [1, 3],
+        [4, 6],
+    ]
+    assert control["category"].tolist() == ["Flag", "SafetyCar"]
+    assert control["message"].iloc[1] == "SAFETY CAR DEPLOYED"
 
     assert set(laps["driver_id"]) == {"max_verstappen", "norris"}
     assert laps["team_id"].dropna().unique().tolist() == ["red_bull", "mclaren"]

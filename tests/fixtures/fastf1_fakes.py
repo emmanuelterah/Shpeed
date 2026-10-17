@@ -21,7 +21,7 @@ class FakeSession:
     weather_data: pd.DataFrame
     track_status: pd.DataFrame
     date: pd.Timestamp
-    t0_date: pd.Timestamp
+    race_control_messages: pd.DataFrame
 
 
 def fake_session(
@@ -102,7 +102,20 @@ def fake_session(
             "Message": ["AllClear", "SCDeployed", "AllClear"],
         }
     )
-    return FakeSession(laps, results, weather, track_status, pd.Timestamp(start), t0)
+    race_control = pd.DataFrame(
+        {
+            "Time": [pd.Timestamp(start), pd.Timestamp(start) + pd.Timedelta(minutes=59)],
+            "Category": ["Flag", "SafetyCar"],
+            "Message": ["GREEN LIGHT - PIT EXIT OPEN", "SAFETY CAR DEPLOYED"],
+            "Status": ["", ""],
+            "Flag": ["GREEN", None],
+            "Scope": ["Track", "Track"],
+            "Sector": [None, None],
+            "RacingNumber": ["1", None],
+            "Lap": [None, 4],
+        }
+    )
+    return FakeSession(laps, results, weather, track_status, pd.Timestamp(start), race_control)
 
 
 def fake_schedule(season: int = 2024) -> pd.DataFrame:

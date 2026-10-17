@@ -185,11 +185,17 @@ def data_verify(ctx: typer.Context) -> None:
     if result.ok:
         typer.secho(f"OK: {result.files_checked} data files present.", fg=typer.colors.GREEN)
         return
-    typer.secho(
-        f"{len(result.missing)} of {result.files_checked} files missing:", fg=typer.colors.RED
-    )
-    for path in result.missing:
-        typer.echo(f"  {path}")
+    if result.missing:
+        typer.secho(
+            f"{len(result.missing)} of {result.files_checked} files missing:", fg=typer.colors.RED
+        )
+        for path in result.missing:
+            typer.echo(f"  {path}")
+    for name, (recorded, actual) in result.mismatched.items():
+        typer.secho(
+            f"  {name}: {actual:,} rows, sync metadata recorded {recorded:,}",
+            fg=typer.colors.RED,
+        )
     raise typer.Exit(1)
 
 

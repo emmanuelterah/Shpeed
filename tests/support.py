@@ -98,6 +98,30 @@ def result_rows(
     )
 
 
+def ledger_rows(
+    source: str = "fastf1",
+    *,
+    season: int = 2025,
+    round_: int = 1,
+    session: str = "R",
+    run_id: str = "r",
+    ingested_at: datetime = T0,
+) -> pd.DataFrame:
+    """Build valid ``_ingested`` ledger rows for one session."""
+    return pd.DataFrame(
+        [
+            {
+                "source": source,
+                "season": season,
+                "round": round_,
+                "session": session,
+                "run_id": run_id,
+                "ingested_at": ingested_at,
+            }
+        ]
+    )
+
+
 SYNTH_DRIVERS = tuple(f"driver_{i:02d}" for i in range(10))
 """Synthetic drivers, fastest first: ``driver_00`` is the strongest."""
 

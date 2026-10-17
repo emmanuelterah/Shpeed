@@ -36,6 +36,9 @@ _REQUIRED = {
     "stop",
     "run_id",
     "ingested_at",
+    "start_lap",
+    "end_lap",
+    "subject_id",
 }
 
 _RANGES: dict[str, dict[str, Any]] = {
@@ -51,9 +54,14 @@ _RANGES: dict[str, dict[str, Any]] = {
     "position": {"ge": 1, "le": 30},
     "grid": {"ge": 0, "le": 30},
     "points": {"ge": 0},
+    "wins": {"ge": 0},
     "laps": {"ge": 0, "le": 120},
     "stop": {"ge": 1, "le": 12},
     "lap": {"ge": 1, "le": 120},
+    "start_lap": {"ge": 1, "le": 120},
+    "end_lap": {"ge": 1, "le": 120},
+    "sector": {"ge": 0, "le": 99},
+    "driver_number": {"ge": 1, "le": 120},
     "duration_s": {"gt": 0.0, "le": 7200.0},
     "air_temp_c": {"ge": -10.0, "le": 60.0},
     "track_temp_c": {"ge": -10.0, "le": 80.0},
@@ -65,6 +73,7 @@ _ALLOWED: dict[str, list[str]] = {
     "session": ["FP1", "FP2", "FP3", "SQ", "S", "Q", "R"],
     "event_format": ["conventional", "sprint", "sprint_qualifying", "sprint_shootout"],
     "status": ["1", "2", "3", "4", "5", "6", "7"],
+    "scope": ["driver", "constructor"],
 }
 
 
@@ -79,12 +88,21 @@ def _checks(table: str, column: str) -> list[pa.Check]:
         elif "ge" in bounds:
             checks.append(_CHECK.ge(bounds["ge"]))
     allowed = _ALLOWED.get(column)
-    if allowed and not (table == "results" and column == "status"):
+    # ``scope`` and ``status`` mean different things per table, so only constrain the
+    # table that owns the enum.
+    skipped = (table == "results" and column == "status") or (
+        table == "race_control" and column == "scope"
+    )
+    if allowed and not skipped:
         checks.append(_CHECK.isin(allowed))
     return checks
 
 
 def _required(table: str, column: str) -> bool:
+    if table == "race_control" and column in {"category", "message"}:
+        return True
+    if table == "standings" and column == "scope":
+        return True
     return column in _REQUIRED or (table == "track_status" and column == "status")
 
 

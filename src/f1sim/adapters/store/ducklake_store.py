@@ -22,6 +22,7 @@ from pathlib import Path
 import duckdb
 import pandas as pd
 
+from f1sim import __version__
 from f1sim.adapters.store.lock import writer_lock
 from f1sim.adapters.store.schemas import validate
 from f1sim.adapters.store.tables import DATA_TABLES, TABLES, TableSpec
@@ -32,8 +33,18 @@ CATALOG = "lake"
 
 _SYNC_RUNS = (
     f"CREATE TABLE IF NOT EXISTS {CATALOG}._sync_runs "
-    "(run_id VARCHAR, committed_at TIMESTAMP, row_counts VARCHAR)"
+    "(run_id VARCHAR, snapshot_id BIGINT, committed_at TIMESTAMP, "
+    "sources VARCHAR, versions VARCHAR, row_counts VARCHAR)"
 )
+_SYNC_RUN_TYPES = {
+    "run_id": "VARCHAR",
+    "snapshot_id": "BIGINT",
+    "committed_at": "TIMESTAMP",
+    "sources": "VARCHAR",
+    "versions": "VARCHAR",
+    "row_counts": "VARCHAR",
+}
+_SYNC_RUN_COLUMNS = frozenset(_SYNC_RUN_TYPES)
 
 
 BUNDLED_EXTENSION_PACKAGE = "duckdb_extension_ducklake"
@@ -41,20 +52,23 @@ BUNDLED_EXTENSION_PACKAGE = "duckdb_extension_ducklake"
 
 @dataclass(frozen=True)
 class VerifyReport:
-    """The result of checking the store's data files.
+    """The result of checking the store's data files and sync metadata.
 
     Attributes:
         files_checked: Data files the catalog references.
         missing: Paths that are missing or empty.
+        mismatched: ``table`` to ``(recorded, actual)`` row counts that disagree with
+            the last sync's metadata.
     """
 
     files_checked: int
     missing: list[str] = field(default_factory=list[str])
+    mismatched: dict[str, tuple[int, int]] = field(default_factory=dict[str, tuple[int, int]])
 
     @property
     def ok(self) -> bool:
-        """Whether every referenced file is present."""
-        return not self.missing
+        """Whether every referenced file is present and every row count matches."""
+        return not self.missing and not self.mismatched
 
 
 def load_ducklake(con: duckdb.DuckDBPyConnection) -> None:
@@ -88,6 +102,14 @@ def _sql_str(value: str) -> str:
     return value.replace("'", "''")
 
 
+def _sources(checked: Mapping[str, pd.DataFrame]) -> list[str]:
+    """The distinct source names a commit's ledger rows came from."""
+    ledger = checked.get("_ingested")
+    if ledger is None or ledger.empty:
+        return []
+    return sorted({str(source) for source in ledger["source"]})
+
+
 class DuckLakeStore:
     """The transactional data store: a ``DataWriter``, ``DataReader`` and ``SyncLedger``."""
 
@@ -114,12 +136,25 @@ class DuckLakeStore:
     def _ensure_tables(self) -> None:
         existing = {r[0] for r in self._con.execute("SHOW TABLES FROM lake").fetchall()}
         wanted = {*TABLES, "_sync_runs"}
-        if wanted <= existing:
+        if wanted <= existing and self._sync_runs_complete():
             return
         with writer_lock(self._root, timeout_s=30), self._transaction():
             for spec in TABLES.values():
                 self._con.execute(spec.ddl(CATALOG))
             self._con.execute(_SYNC_RUNS)
+            self._migrate_sync_runs()
+
+    def _migrate_sync_runs(self) -> None:
+        """Add sync-metadata columns a catalog created by an older version is missing."""
+        present = {row[0] for row in self._con.execute(f"DESCRIBE {CATALOG}._sync_runs").fetchall()}
+        for column in sorted(_SYNC_RUN_COLUMNS - present):
+            self._con.execute(
+                f"ALTER TABLE {CATALOG}._sync_runs ADD COLUMN {column} {_SYNC_RUN_TYPES[column]}"
+            )
+
+    def _sync_runs_complete(self) -> bool:
+        present = {row[0] for row in self._con.execute(f"DESCRIBE {CATALOG}._sync_runs").fetchall()}
+        return _SYNC_RUN_COLUMNS.issubset(present)
 
     @contextmanager
     def _transaction(self) -> Generator[None]:
@@ -154,12 +189,41 @@ class DuckLakeStore:
                     self._replace(TABLES[name], df)
             for name in checked:
                 self._assert_unique(TABLES[name])
-            counts = json.dumps({name: len(df) for name, df in checked.items()})
-            self._con.execute(
-                f"INSERT INTO {CATALOG}._sync_runs VALUES (?, ?, ?)",
-                [run_id, datetime.now(UTC).replace(tzinfo=None), counts],
-            )
+            self._record_run(run_id, checked)
         return self.latest_snapshot()
+
+    def _record_run(self, run_id: str, checked: Mapping[str, pd.DataFrame]) -> None:
+        """Record the sync's metadata, including the snapshot this transaction creates.
+
+        It runs inside the commit's transaction, so the snapshot ID is the one the
+        transaction is about to create (``ducklake_current_snapshot`` plus one: the
+        current snapshot is the last committed one, and a single writer holds the
+        lock, so nothing else can take the next ID first).
+        """
+        self._con.execute(
+            f"INSERT INTO {CATALOG}._sync_runs VALUES (?, ?, ?, ?, ?, ?)",
+            [
+                run_id,
+                self._next_snapshot(),
+                datetime.now(UTC).replace(tzinfo=None),
+                json.dumps(_sources(checked)),
+                json.dumps({"f1sim": __version__}),
+                json.dumps(self._current_counts()),
+            ],
+        )
+
+    def _next_snapshot(self) -> int:
+        row = self._con.execute(f"SELECT * FROM ducklake_current_snapshot('{CATALOG}')").fetchone()
+        latest = row[0] if row else None
+        return (int(latest) if latest is not None else 0) + 1
+
+    def _current_counts(self) -> dict[str, int]:
+        """Row counts per table as they are right now, including uncommitted writes."""
+        counts: dict[str, int] = {}
+        for name in TABLES:
+            row = self._con.execute(f"SELECT count(*) FROM {CATALOG}.{name}").fetchone()
+            counts[name] = int(row[0]) if row else 0
+        return counts
 
     def _replace(self, spec: TableSpec, df: pd.DataFrame) -> None:
         keys = list(spec.replace_key)
@@ -247,10 +311,11 @@ class DuckLakeStore:
 
     # ------------------------------------------------------------------ maintenance
     def verify(self) -> VerifyReport:
-        """Check that every data file the catalog references exists and is non-empty (P1-14).
+        """Check the catalog's data files and that row counts match the sync metadata (P1-14).
 
         Returns:
-            How many files were checked, and which are missing.
+            How many files were checked, which are missing, and any table whose row
+            count disagrees with the last sync's record.
         """
         missing: list[str] = []
         checked = 0
@@ -262,7 +327,28 @@ class DuckLakeStore:
                 p = Path(str(path))
                 if not p.is_file() or p.stat().st_size == 0:
                     missing.append(str(path))
-        return VerifyReport(files_checked=checked, missing=missing)
+        # Counting rows needs the files, so only compare them once every file is present.
+        mismatched = {} if missing else self._count_mismatches()
+        return VerifyReport(files_checked=checked, missing=missing, mismatched=mismatched)
+
+    def _count_mismatches(self) -> dict[str, tuple[int, int]]:
+        """Compare each table's rows to the last sync's recorded totals."""
+        row = self._con.execute(
+            f"SELECT snapshot_id, row_counts FROM {CATALOG}._sync_runs "
+            "WHERE snapshot_id IS NOT NULL ORDER BY snapshot_id DESC LIMIT 1"
+        ).fetchone()
+        if row is None:
+            return {}
+        expected: dict[str, int] = json.loads(row[1])
+        try:
+            actual = self.row_counts(snapshot=SnapshotId(int(row[0])))
+        except duckdb.Error:  # the recorded snapshot has since been expired
+            return {}
+        return {
+            name: (int(want), int(actual.get(name, 0)))
+            for name, want in expected.items()
+            if int(actual.get(name, 0)) != int(want)
+        }
 
     def expire_snapshots(
         self, *, keep_last: int, protect: frozenset[SnapshotId] = frozenset()
