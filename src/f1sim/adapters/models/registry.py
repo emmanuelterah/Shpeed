@@ -82,13 +82,25 @@ def _pace(options: ModelOptions) -> ModelSpec:
     return ModelSpec(PacePredictor.name, _build, PACE_TABLES)
 
 
-def _simulator(options: ModelOptions) -> ModelSpec:
-    context = SimulatorContext(
+def simulator_context(options: ModelOptions) -> SimulatorContext:
+    """Build the simulator's context from the options, with its calibrated defaults.
+
+    Args:
+        options: Pace hyperparameters, rules folder and run count.
+
+    Returns:
+        The context every simulator built by the registry shares.
+    """
+    return SimulatorContext(
         pace=pace_context(options),
         circuits=load_circuits(),
         rules_dir=options.rules_dir,
         n_sims=options.n_sims if options.n_sims is not None else N_SIMS,
     )
+
+
+def _simulator(options: ModelOptions) -> ModelSpec:
+    context = simulator_context(options)
 
     def _build(seed: int) -> Predictor:
         return SimulatorPredictor(seed, context)

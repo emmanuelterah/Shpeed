@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Changed
+- The simulator's track position is calibrated against real 2021 races (ADR-0008): a
+  `pass_offset` of -1.4 log-odds brings on-track passing from 1.8 times the real rate to the
+  real rate, the race-day strategy draw uses a 2 s softmax instead of 8 s, and race-day pace
+  noise is 0.3% instead of the pace model's 0.45%, which counted strategy and passing
+  randomness twice. The three are `SimulatorContext` settings; `OvertakeStep` and
+  `OvertakingModel.pass_probability` take the offset, and `simulator_context` builds the
+  registry's context.
 - `configs/pace_hyper.json`: pace hyperparameters fitted by NUTS on 2021 (all R-hat at most
   1.003, race-day noise 0.45%), and every model's benchmark re-recorded on snapshot 10. The
   simulator scores RPS 0.128 on 2021–2022 and 0.133 on 2022 alone, the best recorded model.
