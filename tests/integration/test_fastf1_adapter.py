@@ -73,6 +73,16 @@ def test_missing_driver_id_falls_back_to_code() -> None:
     assert "code:nor" in set(laps["driver_id"])
 
 
+def test_lap_times_fall_back_when_fastf1_omits_absolute_dates() -> None:
+    adapter = _adapter({(2024, 1, "R"): fake_session(drop_lap_start_date=True)})
+    tables = adapter.fetch(RACE)
+    laps = validate("laps", tables["laps"])
+    assert laps["lap_start_utc"].notna().all()
+    assert laps["lap_start_utc"].min() == datetime(2024, 3, 2, 15, 55)
+    weather = validate("weather", tables["weather"])
+    assert weather["time_utc"].min() == datetime(2024, 3, 2, 15, 0)
+
+
 def test_unavailable_session_raises_data_error() -> None:
     with pytest.raises(DataError, match="could not load"):
         _adapter({}).fetch(RACE)
