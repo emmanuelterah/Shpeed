@@ -41,6 +41,20 @@ def test_race_fit_recovers_fuel_and_tyre_wear(laps: pd.DataFrame) -> None:
     assert fit.residual_sd == pytest.approx(0.3, abs=0.05)
 
 
+def test_a_compound_only_one_driver_ran_is_dropped_not_the_session(laps: pd.DataFrame) -> None:
+    race = _session(laps, 1, "R")
+    lone = str(race["driver_id"].iloc[0])
+    # Only ``lone`` runs the soft, and only on the soft, so its offset cannot be separated.
+    others = race.loc[race["driver_id"] != lone]
+    others = others.assign(compound=others["compound"].replace({"SOFT": "MEDIUM"}))
+    single = pd.concat([others, race.loc[race["driver_id"] == lone].assign(compound="SOFT")])
+    fit = fit_race_laps(single, fuel=FUEL_S_PER_LAP)
+    assert fit is not None
+    assert lone not in fit.drivers
+    assert len(fit.drivers) == 9
+    assert "SOFT" not in fit.offsets
+
+
 def test_known_fuel_is_removed_instead_of_fitted(laps: pd.DataFrame) -> None:
     fit = fit_race_laps(_session(laps, 1, "R"), fuel=FUEL_S_PER_LAP)
     assert fit is not None

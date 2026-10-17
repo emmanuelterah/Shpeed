@@ -32,6 +32,8 @@ OUTLIER_MADS = 3.5
 MAD_TO_SD = 1.4826
 MIN_FIT_LAPS = 30
 """Laps a session needs before its own fit is trusted."""
+MIN_COMPOUNDS_TO_DROP = 2
+"""A rank-deficient fit drops its least-used compound only while at least this many remain."""
 
 FUEL_PRIOR = (0.06, 0.03)
 """Global prior for the fuel effect: mean and standard deviation, seconds per lap."""
@@ -272,6 +274,33 @@ class CircuitHistory:
 
 
 def _fit(
+    laps: pd.DataFrame,
+    y: NDArray[np.float64],
+    extra: dict[str, NDArray[np.float64]],
+    *,
+    with_wear: bool,
+) -> SessionFit | None:
+    """Fit a session, dropping compounds the data cannot separate from the drivers.
+
+    A compound run only by drivers who ran nothing else has an offset (and wear) that is
+    collinear with those drivers' levels, so the design is rank-deficient. Rather than lose
+    the whole session, the least-used compound is dropped and the fit retried, until the
+    design is full rank or one compound is left.
+    """
+    while True:
+        fitted = _fit_once(laps, y, extra, with_wear=with_wear)
+        compounds = laps["compound"].astype(str)
+        counts = compounds.value_counts()
+        if fitted is not None or len(counts) < MIN_COMPOUNDS_TO_DROP:
+            return fitted
+        keep = (compounds != str(counts.index[-1])).to_numpy()
+        laps, y = laps.loc[keep], y[keep]
+        extra = {name: values[keep] for name, values in extra.items()}
+        if len(laps) < MIN_FIT_LAPS:
+            return None
+
+
+def _fit_once(
     laps: pd.DataFrame,
     y: NDArray[np.float64],
     extra: dict[str, NDArray[np.float64]],

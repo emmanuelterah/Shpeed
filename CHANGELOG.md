@@ -6,6 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Changed
+- `configs/pace_hyper.json`: pace hyperparameters fitted by NUTS on 2021 (all R-hat at most
+  1.003, race-day noise 0.45%), and every model's benchmark re-recorded on snapshot 10. The
+  simulator scores RPS 0.128 on 2021–2022 and 0.133 on 2022 alone, the best recorded model.
+- The backtester always loads the `laps` table, to read session end times.
+- The strategy generator's dynamic program and stint-cost table are vectorised: the same plans,
+  about 3.6 times faster.
+- `RaceEntry` has a `pit_lane` flag (default `False`) for cars starting from the pit lane (P5-08).
+- `Settings.n_sims` (`F1SIM_N_SIMS`) now sets the simulator's runs per race through
+  `ModelOptions.n_sims`.
+- The `Model regression` workflow also triggers on the engine, steps and perf tests (its path
+  filter named a folder that does not exist) and runs the engine benchmark.
 - The statistical stack moved from PyMC to NumPyro and JAX (ADR-0003), plus statsmodels.
 - `get_model` takes `ModelOptions` (pace hyperparameters, fitted-state store).
 - Data dependencies (FastF1, DuckDB, pandera, httpx and others) and the statistical stack
@@ -19,6 +30,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   disagrees with that metadata (P1-10, P1-14).
 
 ### Fixed
+- Backtest cutoffs for 2021 and 2022 fell at 15:30 UTC on qualifying day, because Jolpica gives
+  only the date of qualifying and the time was assumed; any later qualifying (Bahrain, Jeddah,
+  Abu Dhabi, Austin, Mexico City, São Paulo) was hidden from the pace model and the simulator.
+  The cutoff now takes the latest session end recorded by the results or the lap timing, never
+  past the race (ADR-0005 amendment).
+- A session whose fit was rank-deficient (a compound run only by drivers who ran nothing else)
+  was discarded whole, losing 23% of practice sessions and some dry qualifying and races; the
+  least-used compound is now dropped and the session refitted.
+- A driver whose only timed laps were compromised could sit 5–44% off the field in a session's
+  pace observation; drivers beyond four robust deviations of the median are now left out
+  (ADR-0006). Pace `MODEL_VERSION` is 2, so old saved states are not reused.
 - A sync whose data has practice or qualifying but no completed race no longer feeds each
   session to the pace filter twice.
 - `_sync_runs` recorded snapshot ID 1 for every commit after the catalog was reopened (it
@@ -40,6 +62,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   track-evolution term and the Phase 4 temperature term.
 
 ### Added
+- Phase 5 race simulator (P5-01 to P5-12), registered as the `simulator` model:
+  - vectorised `RaceState` over `(n_sims, n_cars)` with cumulative race time as the source of
+    the order and gaps (P5-01), run by the ordered `LapStep` pipeline (P5-02);
+  - lap times from per-run pace posterior draws, compound offsets, sampled tyre-loss curves,
+    fuel and lap noise (P5-03);
+  - a pass model fitted on close adjacent pairs in the end-of-lap running order, green-flag
+    laps without a stop only, with circuit difficulty and a log-odds bonus for DRS or Overtake Mode read from the season rules (P5-04, P5-06), and an
+    overtake step that resolves passes in start-of-lap order, one place per lap;
+  - a separate dirty-air step (P5-05) and a pit-stop step with per-stop sampled stop times,
+    slow-stop tail included (P5-07);
+  - the starting grid with slot offsets, pit-lane starts and `apply_grid_penalties` (P5-08);
+  - bit-identical matrices for a seed (P5-09), property tests of every lap's invariants
+    (P5-10), a pytest-benchmark engine benchmark (10,000 runs of a 22-car race in about 5 s,
+    P5-11) and aggregation into a `PositionMatrix` with P(DNF) (P5-12);
+  - a prior-only tyre model for when there is too little history to fit one, and ADR-0008.
 - `f1sim data sync --force` re-fetches and replaces sessions already stored, so a change in
   how a source's data is converted can be republished.
 - Phase 4 tyres and pit strategy (P4-01 to P4-10):

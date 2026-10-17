@@ -97,7 +97,8 @@ Shpeed/
       models/          # baselines, registry, pace (corrections, filter, NumPyro fit,
                        # checks, reference); later tyres, strategy, overtaking, hazards
       benchmarks.py    # benchmarks/<model>.json records and the regression gate
-      steps/           # lap_time, overtake, pit_stop, safety_car, reliability, lap1
+      steps/           # lap_time, dirty_air, pit_stop, overtake; later safety_car,
+                       # reliability, lap1 (ADR-0008)
       publishers/      # git_pages, local_file (tests)
     api/               # read-only FastAPI service and its container health check
     reports/           # backtest reports
@@ -316,6 +317,7 @@ The data pipeline (`f1sim data sync`, `predict`) is not a service: it runs as a 
 | D7 · ADR-0002 | Transactional store on DuckLake | Atomic syncs and snapshot-pinned reads; any forecast can be replayed |
 | D8 | Core owns the interfaces | Heavy libraries live behind small ports; swapping one touches one adapter |
 | D9 · ADR-0004 | React + TypeScript + Vite frontend on Apple HIG | Static app on Pages; types generated from the shared schema |
+| D10 · ADR-0008 | Cumulative-time race state, passes resolved in start-of-lap order | Track position matters after lap 1; each mechanic is its own LapStep |
 
 ---
 
