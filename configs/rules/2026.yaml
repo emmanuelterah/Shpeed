@@ -1,0 +1,12 @@
+# 2026 regulations: the reset. Loaded and validated by f1sim (P4-06).
+season: 2026
+race_distance_km: 305            # minimum race distance
+dry_compounds_per_event: 3
+mandatory_compound_change: true
+overtake_aid: overtake_mode      # DRS replaced by manual overrides and Overtake Mode
+active_aero: true                # X-mode moveable front and rear aero
+sprint_format: sprint_qualifying
+power_unit:
+  mguh: false                    # MGU-H removed under the 2026 power-unit rules
+  mguk_kw: 350                   # electric deployment roughly triples
+notes: "50/50 combustion/electric power split; active aero; no MGU-H."

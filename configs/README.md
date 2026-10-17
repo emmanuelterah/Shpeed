@@ -8,4 +8,6 @@ Rules and reference data that change by season live here, so code does not have 
   `pip install`.
 - `pace_hyper.json` is written by `f1sim pace fit`: the fitted pace-model hyperparameters,
   with diagnostics and provenance. Commit it so forecasts and backtests are reproducible.
+- `tyre_model.json` is written by `f1sim tyres fit`: the fitted degradation curves, warm-up
+  penalties, pit loss and stop times (P4-01 to P4-05). Commit it for reproducible strategies.
 - `mappings/` canonical driver, team and event IDs and the team lineage table (P1-05, P1-06)

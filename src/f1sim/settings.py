@@ -23,6 +23,8 @@ class Settings(BaseSettings):
         cors_origins: Browser origins allowed to call the API directly.
         pace_hyper_path: Fitted pace-model hyperparameters written by ``f1sim pace fit``;
             the built-in defaults are used while the file does not exist.
+        tyre_model_path: Fitted tyre and strategy model written by ``f1sim tyres fit``.
+        rules_dir: Folder holding ``<season>.yaml`` season-rules files (P4-06).
     """
 
     model_config = SettingsConfigDict(env_prefix="F1SIM_", env_file=".env", extra="ignore")
@@ -36,6 +38,8 @@ class Settings(BaseSettings):
     predictions_dir: Path = Path("predictions")
     cors_origins: list[str] = []
     pace_hyper_path: Path = Path("configs/pace_hyper.json")
+    tyre_model_path: Path = Path("configs/tyre_model.json")
+    rules_dir: Path = Path("configs/rules")
 
     @property
     def state_dir(self) -> Path:

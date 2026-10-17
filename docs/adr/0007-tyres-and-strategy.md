@@ -1,0 +1,43 @@
+# 0007. Tyres and pit strategy: pooled degradation curves and a softmax chooser
+
+- Status: Accepted
+- Date: 2026-10-17
+- Roadmap: P4-01 to P4-10
+
+## Context
+
+The simulator needs to know how each compound loses time with tyre age at each circuit, what a pit stop costs, which strategies are legal under a season's rules, and how likely a team is to run each of them. Lap-time loss against tyre age is not linear: it bends up late in a stint (the "cliff"), so it needs a flexible shape, but single races give few laps per compound, so the shape must borrow strength across circuits.
+
+## Decision
+
+**Degradation (P4-01).** One race is a least-squares fit, `lap time ~ driver + compound + lap number + per-compound spline(age)`, on clean dry race laps. The lap-number slope is the fuel effect; tyre age resets at a stop while the lap count does not, which separates the two. The spline is a truncated-power basis `[age, max(0, age - k)]` with knots at 5, 10, 15, 20, 25 and 30 laps, so a late knot turns up into a cliff. Two iterations of MAD-based trimming drop outliers. Race curves are then pooled per compound with a precision-weighted mean (`pool`) to a global curve (weak prior 0 ± 0.5 s), and per circuit with the global curve as the prior, so a circuit with little data shrinks toward the global shape. Because every lap has exactly one driver and one compound, the driver and compound dummy sets are collinear; the reference driver is dropped so the design is full rank and the compound offsets stay identified.
+
+**Warm-up (P4-02).** Ages 1 and 2 are held out of the fit; their residuals, pooled by compound and age, are the warm-up penalty the strategy model adds back. Keeping them out of the fit stops the warm-up being mistaken for high initial wear.
+
+**Temperature (P4-03).** An optional `track_temp_c x age` interaction per compound. It is kept only when it improves held-out stint RMSE by more than `TEMPERATURE_GAIN_MIN` (0.005 s); otherwise the plain model is used, so the term has to earn its place.
+
+**Pit loss (P4-04) and stop duration (P4-05).** Pit loss is a stop's in-lap plus out-lap, minus twice the driver's clean-lap baseline, measured from timing data and pooled per circuit with a weak prior. It already includes the time stationary, because the two laps span the whole stop. The store's `pit_stops.duration_s` is the recorded pit-lane time, from entry line to exit line, so it is modelled as a per-team normal core with an exponential slow-stop tail (fraction and scale from the data). Because the pit loss already contains the stop, the engine adds only a team's deviation from the field mean (`StopTimeModel.offset`), so slow wheel-guns are felt without double counting the whole stop. Per-race estimates use the median (not the mean) so safety-car and red-flag stops do not move them, and out-of-range stops are dropped.
+
+**Season rules (P4-06).** The regulations that change between seasons live in `configs/rules/<season>.yaml` and are validated by frozen dataclasses in `f1sim.core.domain.rules`; the loader is in `f1sim.adapters.config_files` because the core does no file I/O. A rules change (the 2026 reset) is a data change.
+
+**Strategy (P4-07 to P4-09).** The generator holds a per-compound inclusive stint-cost table and runs a dynamic program over stint lengths to find the best stop laps for each legal compound sequence, then adds ±1 and ±2 lap variants. A plan's stop cost is the circuit's pit loss (which already includes the stop) plus only the team's deviation from the field mean, so a slow team is penalised once, not twice. Legality comes from the rules (mandatory compound change, one- to three-stop) and, when given, from the remaining tyre sets per compound. The chooser scores each plan with a softmax over expected race time, weighted by the team's historical stop count and starting compound, so a team is rarely modelled as taking the exact optimum. The stop-lap distributions give the pit windows.
+
+**Calibration (P4-10).** A window built directly from the chooser's optimal lap is far too narrow: real crews stop many laps off the optimum (safety cars, track position, teammate splits), so almost nothing falls inside it. The report therefore learns a *stop-lap spread* on the training seasons: for each race it takes the chooser's probability-weighted mean lap per stop, measures the error to the lap the car actually stopped on, and keeps the 10th and 90th percentile of that error as a fraction of race distance, per stop index (pooled when a stop index has too few samples). A held-out window is the mean lap plus those offsets, clipped to the race. The report then compares those windows with the laps cars actually stopped on, per circuit. This is the Phase 4 gate, alongside the held-out stint error: green-flag dry laps only, each stint measured against its own youngest age so driver and team pace cancel, and a stint far from the driver's own best (wet or interrupted) dropped.
+
+## Alternatives considered
+
+- **A parametric wear curve (linear or quadratic).** Cannot capture the cliff, which is what decides one-stop versus two-stop races.
+- **Pooling countries or circuit clusters instead of circuits.** Circuits within a cluster still differ enough that the per-circuit shrink is worth it; clusters are already used by the pace model for a different question.
+- **Fitting the chooser probabilities directly (a classifier over plans).** The plan set is race-specific and mostly determined by the rules and expected time; a softmax over expected time with a trend term is simpler, needs little data, and stays interpretable.
+- **Treating `pit_stops.duration_s` as stationary time.** The provider records the whole pit-lane time, not the time on jacks, so subtracting it from the timing loss cancels the stop and gives a nonsense (near-zero or negative) pit loss.
+- **Measuring held-out stints against the pooled fastest age.** Mixing teams and referencing a single anomalous fast lap (a safety-car or wet lap) shifts every point by tens of seconds; the per-stint youngest-age reference with a wet skip and robust trimming is stable.
+- **Reporting windows straight from the chooser's stop-lap distribution.** The distribution only spreads plan variants by ±1 and ±2 laps, so it ignores the real, larger spread of stop laps; the training-residual spread measures that spread directly and transfers across seasons (16% to 90% coverage on the 2021-to-2022 holdout). Broadening the variants or heating the softmax instead just re-normalises the same narrow shape.
+- **Adding a whole stop duration to the pit loss in strategy scoring.** The pit loss already spans the stop, so this double counts it and pushes the optimum toward too few, too early stops; only the team's deviation from the field is added.
+
+## Consequences
+
+- The spline needs laps past the last knot to be full rank per compound; a compound that only ever appears in a short stint can make a race fit degenerate, and that race is skipped rather than misfitted.
+- Absolute compound pace and driver levels share one reference driver and are only identified up to that driver's pace; differences between compounds and the degradation shape are what the model relies on.
+- The strategy generator enumerates compound sequences up to `MAX_STOPS`, so its cost grows with the number of compounds; it is fine for the three dry compounds and small stop counts it is used with.
+- Team tendencies mix the time-optimal plan with what teams actually did, so the chooser reflects habits (such as starting on the mediums) that a pure optimum would not.
+- The stop-lap spread is learned from training errors, so a regulation or strategy shift that moves those errors (rather than only their scale) would leave the windows mis-centred until the model is refitted; the held-out gate is what catches it.
