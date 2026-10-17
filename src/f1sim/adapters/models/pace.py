@@ -140,7 +140,7 @@ class PacePredictor:
         history, resumed = self._resume(laps, events, snapshot, completed)
         before = (completed.season, completed.round) if completed else None
         observe = self._observer(laps, events, snapshot, history)
-        early: list[SessionObs] = [] if resumed else observe((None, before))
+        early: list[SessionObs] = [] if resumed or before is None else observe((None, before))
         late = observe((before, None))
         for obs in early:
             self.filter.update(obs)

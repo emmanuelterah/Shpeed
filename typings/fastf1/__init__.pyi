@@ -31,6 +31,7 @@ class Session:
     results: pd.DataFrame
     weather_data: pd.DataFrame
     track_status: pd.DataFrame
+    race_control_messages: pd.DataFrame
     date: pd.Timestamp
     t0_date: pd.Timestamp
 

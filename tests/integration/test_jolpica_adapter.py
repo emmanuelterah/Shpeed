@@ -22,12 +22,16 @@ def _adapter(now: datetime, page_size: int = 100, log: list[str] | None = None) 
 
 def test_lists_only_finished_sessions_including_sprints() -> None:
     adapter = _adapter(datetime(2024, 5, 5, 0, 0))  # Miami race day, before the race
-    sessions = set(adapter.sessions(2024))
+    ordered = adapter.sessions(2024)
+    sessions = set(ordered)
     assert SessionKey(R1, SessionType.RACE) in sessions
     assert SessionKey(EventKey(2024, 6), SessionType.SPRINT) in sessions
     assert SessionKey(EventKey(2024, 6), SessionType.QUALIFYING) in sessions
     assert SessionKey(EventKey(2024, 6), SessionType.RACE) not in sessions
     assert all(s.event.round != 24 for s in sessions)
+    sprint = ordered.index(SessionKey(EventKey(2024, 6), SessionType.SPRINT))
+    quali = ordered.index(SessionKey(EventKey(2024, 6), SessionType.QUALIFYING))
+    assert sprint < quali  # the sprint runs before qualifying on a sprint weekend
 
 
 def test_race_fetch_returns_valid_results_pit_stops_and_event() -> None:
@@ -55,6 +59,19 @@ def test_race_fetch_returns_valid_results_pit_stops_and_event() -> None:
     assert events.loc[0, "event_name"] == "Bahrain Grand Prix"
     # Race results become available at the end of the race, not before
     assert results["available_at"].iloc[0] == datetime(2024, 3, 2, 18, 0)
+
+
+def test_race_fetch_returns_driver_and_constructor_standings() -> None:
+    adapter = _adapter(datetime(2025, 1, 1))
+    tables = adapter.fetch(SessionKey(R1, SessionType.RACE))
+    standings = validate("standings", tables["standings"])
+
+    assert set(standings["scope"]) == {"driver", "constructor"}
+    leader = standings.loc[(standings["scope"] == "driver") & (standings["position"] == 1)].iloc[0]
+    assert leader["subject_id"] == "max_verstappen"
+    assert leader["points"] == pytest.approx(26.0)
+    assert leader["wins"] == 1
+    assert len(standings.loc[standings["scope"] == "constructor"]) == 10
 
 
 def test_qualifying_times_are_parsed() -> None:

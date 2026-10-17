@@ -1,4 +1,4 @@
-"""Registered models, by the name the CLI and benchmark files use (P2-07).
+"""Registered models, by the name the CLI and benchmark files use (P2-03).
 
 Adding a model means adding one entry here; the backtester, report and benchmark
 registry pick it up by name.

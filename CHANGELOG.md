@@ -6,15 +6,37 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Changed
-- The `models` extra now installs NumPyro and JAX instead of PyMC (ADR-0003), plus statsmodels.
+- The statistical stack moved from PyMC to NumPyro and JAX (ADR-0003), plus statsmodels.
 - `get_model` takes `ModelOptions` (pace hyperparameters, fitted-state store).
-- Data dependencies (FastF1, DuckDB, pandera, httpx and others) are now core dependencies, so
-  `pip install f1sim` gives a working CLI. The `data` extra is gone; `models` and `api` remain.
+- Data dependencies (FastF1, DuckDB, pandera, httpx and others) and the statistical stack
+  (NumPyro, JAX, statsmodels) are now core dependencies, so `pip install f1sim` gives a working
+  CLI. The `data` and `models` extras are gone; only `api` remains.
 - The team lineage table moved into the package (`f1sim/resources/`), so it loads after a
   `pip install`; it previously relied on the repository layout.
 - `HttpClient` retry settings are grouped into a `RetryPolicy`.
+- A sync's `_sync_runs` metadata now records the snapshot ID, contributing sources and
+  versions alongside the row counts, and `f1sim data verify` fails when a table's row count
+  disagrees with that metadata (P1-10, P1-14).
+
+### Fixed
+- A sync whose data has practice or qualifying but no completed race no longer feeds each
+  session to the pace filter twice.
+- `_sync_runs` recorded snapshot ID 1 for every commit after the catalog was reopened (it
+  read `ducklake_last_committed_snapshot`, which returns NULL once a process reconnects); the
+  metadata now uses `ducklake_current_snapshot`, so each run records the snapshot it creates
+  and `f1sim data verify` compares against the right rows (P1-10, P1-14).
+- Jolpica session listings put a sprint before qualifying on a sprint weekend.
+- The test network guard allows loopback sockets, so the API tests run on Windows.
 
 ### Added
+- Domain entities for the F1 data (P1-01): frozen `Season`, `Event`, `Session`, `Driver`,
+  `Team`, `Lap`, `Stint`, `PitStop`, `TrackStatus`, `RaceControl`, `Result` and `Standing`
+  value objects, each buildable from its canonical table row.
+- `stints` and `race_control` tables (P1-02), derived from FastF1 laps and race-control
+  messages, and a `standings` table (P1-03) fetched from the Jolpica driver and constructor
+  standings after each race.
+- `SourceAdapter` and `Predictor` contract suites in `tests/contract/`, so every adapter
+  and model is checked against its port.
 - Phase 3 pace model (P3-01 to P3-12, except the engine clipping feature in P3-08):
   - fuel effect per circuit and track evolution per session, pooled with earlier sessions at
     the same circuit; corrected pace observations from qualifying, races, sprints and
@@ -41,7 +63,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   - baselines: grid with fitted noise, driver + team Elo following team lineage, and
     Plackett–Luce fitted by MM with a gamma prior and time decay;
   - Markdown backtest report, `benchmarks/<model>.json` run records and an RPS regression gate;
-  - `f1sim backtest --model --seasons --report --record --check --workers`.
+  - `f1sim backtest --model --seasons --report --record --check --workers`;
+  - real 2021–2022 benchmark runs for every registered model, recorded in `benchmarks/`, and a
+    PR-scoped `Model regression` workflow that restores (or syncs) those seasons and runs
+    `f1sim backtest --check` (P2-13, P2-14).
 - `data gc` also protects snapshots cited by benchmark runs.
 - Repository scaffold: package layout, ports, CI, ADRs 0001–0004, frontend workspace (P0-02, P0-03, P0-12, P0-18).
 - Docker Compose stack: `api` (read-only FastAPI over `predictions/`) and `web` (nginx serving the frontend, proxying `/api`), plus `compose.dev.yaml` with hot reload; CI builds and smoke-tests it (P8-04, P8-05).

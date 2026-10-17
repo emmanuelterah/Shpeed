@@ -40,19 +40,7 @@ from f1sim.core.domain.reference import EngineSuppliers
 from f1sim.core.errors import DataError
 
 # The filter needs double precision: session levels have a very wide prior.
-_config: Any = jax.config
-_config.update("jax_enable_x64", True)
-
-# JAX ships partial type information; these aliases keep array operations typed Any.
-# Local stubs in typings/ cover NumPyro.
-_jnp: Any = jnp
-_lax: Any = jax.lax
-_linalg: Any = jax.scipy.linalg
-_random: Any = jax.random
-_dist: Any = numpyro.distributions
-_infer: Any = numpyro.infer
-_autoguide: Any = numpyro.infer.autoguide
-_optim: Any = numpyro.optim
+jax.config.update("jax_enable_x64", True)
 
 GROUPS = ("Q", "R", "S", "FP")
 KINDS = ("team", "sup", "tq", "tc", "dq", "dr")
@@ -261,32 +249,32 @@ def log_likelihood(panel: Panel, hp: dict[str, Any]) -> Any:
         from ``PaceFilter`` with the same hyperparameters.
     """
     variances = _variances(panel, hp)
-    noise = _jnp.stack([hp["noise_q"], hp["noise_r"], hp["noise_s"], hp["noise_fp"]]) ** 2
+    noise = jnp.stack([hp["noise_q"], hp["noise_r"], hp["noise_s"], hp["noise_fp"]]) ** 2
     dim = panel.kind.shape[0]
-    pair_q, pair_r = _jnp.asarray(panel.pairs[:, 0]), _jnp.asarray(panel.pairs[:, 1])
+    pair_q, pair_r = jnp.asarray(panel.pairs[:, 0]), jnp.asarray(panel.pairs[:, 1])
 
     def _cross(cov: Any, amount: Any) -> Any:
         return cov.at[pair_q, pair_r].add(amount).at[pair_r, pair_q].add(amount)
 
     def _drift(mean: Any, cov: Any, flags: Any, appear: Any) -> tuple[Any, Any]:
         """Drift effects to a new weekend or season, and start new effects at the prior."""
-        cov = cov + _jnp.diag(flags[0] * variances["event"] + flags[1] * variances["season"])
+        cov = cov + jnp.diag(flags[0] * variances["event"] + flags[1] * variances["season"])
         cov = _cross(cov, flags[1] * variances["season_cross"])
         keep = 1.0 - appear
-        cov = cov * keep[:, None] * keep[None, :] + _jnp.diag(appear * variances["prior"])
+        cov = cov * keep[:, None] * keep[None, :] + jnp.diag(appear * variances["prior"])
         return mean * keep, _cross(cov, appear[pair_q] * variances["prior_cross"])
 
     def _update(mean: Any, cov: Any, x: Any) -> tuple[Any, Any, Any]:
         """Condition on one session, with its level integrated out."""
         y, mask, h, group = x
         both = mask[:, None] & mask[None, :]
-        s = _jnp.where(both, h @ cov @ h.T + SESSION_LEVEL_SD**2, 0.0)
-        s = s + _jnp.diag(_jnp.where(mask, noise[group], 1.0))
-        innovation = _jnp.where(mask, y - h @ mean, 0.0)
-        chol = _jnp.linalg.cholesky(s)
-        whitened = _linalg.solve_triangular(chol, innovation, lower=True)
-        log_det = 2.0 * _jnp.sum(_jnp.where(mask, _jnp.log(_jnp.diag(chol)), 0.0))
-        gain = _linalg.cho_solve((chol, True), h @ cov).T
+        s = jnp.where(both, h @ cov @ h.T + SESSION_LEVEL_SD**2, 0.0)
+        s = s + jnp.diag(jnp.where(mask, noise[group], 1.0))
+        innovation = jnp.where(mask, y - h @ mean, 0.0)
+        chol = jnp.linalg.cholesky(s)
+        whitened = jax.scipy.linalg.solve_triangular(chol, innovation, lower=True)
+        log_det = 2.0 * jnp.sum(jnp.where(mask, jnp.log(jnp.diag(chol)), 0.0))
+        gain = jax.scipy.linalg.cho_solve((chol, True), h @ cov).T
         cov = cov - gain @ (h @ cov)
         log_p = -0.5 * (whitened @ whitened + log_det + mask.sum() * LOG_2PI)
         return mean + gain @ innovation, 0.5 * (cov + cov.T), log_p
@@ -297,12 +285,12 @@ def log_likelihood(panel: Panel, hp: dict[str, Any]) -> Any:
         return (mean, cov), log_p
 
     arrays = (panel.y, panel.mask, panel.design, panel.group, panel.flags, panel.appear)
-    _, log_p = _lax.scan(
+    _, log_p = jax.lax.scan(
         _step,
-        (_jnp.zeros(dim), _jnp.zeros((dim, dim))),
-        tuple(_jnp.asarray(a) for a in arrays),
+        (jnp.zeros(dim), jnp.zeros((dim, dim))),
+        tuple(jnp.asarray(a) for a in arrays),
     )
-    return _jnp.sum(log_p)
+    return jnp.sum(log_p)
 
 
 def fitted_sites(panel: Panel) -> tuple[str, ...]:
@@ -328,10 +316,16 @@ def pace_model(panel: Panel) -> None:
     """
     sites = fitted_sites(panel)
     hp: dict[str, Any] = {
-        name: numpyro.sample(name, _dist.HalfNormal(scale)) if name in sites else UNUSED_NOISE
+        name: (
+            numpyro.sample(name, numpyro.distributions.HalfNormal(scale))
+            if name in sites
+            else UNUSED_NOISE
+        )
         for name, scale in HALF_NORMAL_SCALES.items()
     }
-    hp["driver_corr"] = numpyro.sample("driver_corr", _dist.Uniform(-CORR_BOUND, CORR_BOUND))
+    hp["driver_corr"] = numpyro.sample(
+        "driver_corr", numpyro.distributions.Uniform(-CORR_BOUND, CORR_BOUND)
+    )
     numpyro.factor("log_likelihood", log_likelihood(panel, hp))
 
 
@@ -364,7 +358,7 @@ def fit_hyper(
     if method not in METHODS:
         raise DataError(f"unknown method {method!r}; choose from {', '.join(METHODS)}")
     started = time.perf_counter()
-    key = _random.PRNGKey(seed)
+    key = jax.random.PRNGKey(seed)
     sites = fitted_sites(panel)
     if method == "nuts":
         samples, stats = _nuts(panel, key, sampler, sites)
@@ -390,8 +384,8 @@ def fit_hyper(
 def _nuts(
     panel: Panel, key: Any, sampler: tuple[int, int, int], sites: tuple[str, ...]
 ) -> tuple[dict[str, NDArray[np.float64]], dict[str, dict[str, Any]]]:
-    mcmc = _infer.MCMC(
-        _infer.NUTS(pace_model, target_accept_prob=0.9),
+    mcmc = numpyro.infer.MCMC(
+        numpyro.infer.NUTS(pace_model, target_accept_prob=0.9),
         num_warmup=sampler[0],
         num_samples=sampler[1],
         num_chains=sampler[2],
@@ -413,8 +407,8 @@ def _laplace(
     The fit counts as found only if the optimum is finite and the curvature is positive
     in every direction; a flat direction means some hyperparameter is not identified.
     """
-    guide = _autoguide.AutoLaplaceApproximation(pace_model)
-    svi = _infer.SVI(pace_model, guide, _optim.Minimize(), _infer.Trace_ELBO())
+    guide = numpyro.infer.autoguide.AutoLaplaceApproximation(pace_model)
+    svi = numpyro.infer.SVI(pace_model, guide, numpyro.optim.Minimize(), numpyro.infer.Trace_ELBO())
     state = svi.init(key, panel)
     state, loss = svi.update(state, panel)
     params = svi.get_params(state)
@@ -447,7 +441,7 @@ def _flags(observations: Sequence[SessionObs]) -> NDArray[np.float64]:
 
 def _variances(panel: Panel, hp: dict[str, Any]) -> dict[str, Any]:
     """Per-effect prior, per-race and per-season variances, as in ``PaceFilter``."""
-    kind = _jnp.asarray(panel.kind)
+    kind = jnp.asarray(panel.kind)
     is_ = {k: (kind == i).astype(float) for i, k in enumerate(KINDS)}
     sd_of = {
         "team": hp["team_sd"],

@@ -1,0 +1,55 @@
+name: Model regression
+
+on:
+  pull_request:
+    paths:
+      - "src/f1sim/adapters/models/**"
+      - "src/f1sim/adapters/engine/**"
+      - "src/f1sim/adapters/benchmarks.py"
+      - "src/f1sim/core/usecases/backtest.py"
+      - "benchmarks/**"
+      - "uv.lock"
+      - ".github/workflows/model-regression.yml"
+
+concurrency:
+  group: model-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  SEASONS: 2021-2022
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync --all-extras
+
+      - name: Restore the local data store
+        id: data
+        uses: actions/cache@v4
+        with:
+          path: data
+          key: f1sim-data-${{ env.SEASONS }}-${{ hashFiles('uv.lock') }}
+
+      # FastF1 caps one process at 500 API calls an hour, so a season is fetched over
+      # several runs; cached sessions do not count, and re-runs resume from the store.
+      - name: Sync the benchmark seasons
+        if: steps.data.outputs.cache-hit != 'true'
+        run: |
+          for season in 2021 2022; do
+            for attempt in $(seq 1 8); do
+              output="$(uv run --frozen f1sim data sync --season "$season" 2>&1)"
+              printf '%s\n' "$output"
+              if ! grep -q "skipped fastf1" <<<"$output"; then break; fi
+              echo "season $season incomplete (attempt $attempt); retrying"
+            done
+          done
+
+      - name: RPS regression gate
+        run: uv run --frozen f1sim backtest --model all --seasons "$SEASONS" --check

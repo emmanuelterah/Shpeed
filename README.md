@@ -90,8 +90,8 @@ The full design (components, boundaries, data flow and decisions) is in [ARCHITE
 | Read-only API (`/health`, `/predictions`, `/predictions/latest`, `/predictions/{season}/{round}`) | ✅ Built, tested |
 | Web app shell: Race, Season, Calibration and About screens, Apple-style design system | ✅ Built; the Race screen shows clearly labelled sample data in development |
 | Docker Compose stack (API + web), with a hot-reload development mode | ✅ In place |
-| Data ingestion: `f1sim data sync`, `verify`, `report`, `gc` | ✅ Built and tested offline; first live sync pending |
-| Baselines (grid + noise, Elo, Plackett–Luce) and the walk-forward backtester: `f1sim backtest` with leakage guard, report, benchmark records and regression gate | ✅ Built and tested on synthetic seasons; real scores need a live sync |
+| Data ingestion: `f1sim data sync`, `verify`, `report`, `gc` | ✅ Built and tested; 2021–2022 synced locally |
+| Baselines (grid + noise, Elo, Plackett–Luce) and the walk-forward backtester: `f1sim backtest` with leakage guard, report, benchmark records and regression gate | ✅ Built and tested; real 2021–2022 scores recorded in `benchmarks/` |
 | Pace model: fuel and track-evolution corrections, Bayesian team, engine and driver pace updated after every session (`f1sim pace fit`, `check`, `reference`, `update`), registered as the `pace` predictor | ✅ Built and tested on synthetic seasons; hyperparameters need fitting on real data |
 | Tyre, strategy and event models; Monte Carlo engine | 🔜 Phases 4–6 |
 | Automated race-weekend forecasts | 🔜 Phase 8 |
@@ -139,22 +139,26 @@ uv run f1sim --help                                   # command-line interface
 **Load real data** (needs internet access; the first season takes a while because FastF1 downloads every session, later runs only fetch what is new):
 
 ```bash
-uv run f1sim data sync --season 2024                  # Jolpica results + FastF1 laps, weather, track status
+uv run f1sim data sync --season 2022                  # Jolpica results + FastF1 laps, weather, track status
 uv run f1sim data verify                              # every stored file present
-uv run f1sim data report --season 2024                # per-session data-quality table
+uv run f1sim data report --season 2022                # per-session data-quality table
 ```
+
+> F1's live-timing archive now requires an F1TV account, so FastF1 can only download
+> 2021 and 2022 from its public mirror without one; those are the seasons the recorded
+> benchmarks use. With an F1TV login (`python -m fastf1 auth f1tv`) later seasons sync too.
 
 **Backtest the baselines** (after syncing the seasons you want to score, plus one earlier season for the models to learn from):
 
 ```bash
-uv run f1sim backtest --model all --seasons 2023-2024 --report backtest.md   # leaderboard, calibration, per race
-uv run f1sim backtest --model elo --seasons 2023-2024 --record                # append to benchmarks/elo.json
-uv run f1sim backtest --model elo --seasons 2023-2024 --check                 # exit 1 if RPS got worse
+uv run f1sim backtest --model all --seasons 2021-2022 --report backtest.md   # leaderboard, calibration, per race
+uv run f1sim backtest --model elo --seasons 2021-2022 --record                # append to benchmarks/elo.json
+uv run f1sim backtest --model elo --seasons 2021-2022 --check                 # exit 1 if RPS got worse
 ```
 
 Each race is forecast using only data available when qualifying ended ([ADR-0005](docs/adr/0005-backtest-cutoff-and-grid.md)); a model that reads further fails the run.
 
-**Fit and check the pace model** (needs the `models` extra: `uv sync --extra models`):
+**Fit and check the pace model**:
 
 ```bash
 uv run f1sim pace fit --seasons 2021-2023                     # NUTS; writes configs/pace_hyper.json
