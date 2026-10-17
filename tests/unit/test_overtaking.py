@@ -115,6 +115,15 @@ def test_too_little_history_falls_back_to_the_default() -> None:
     assert model == default_overtaking()
 
 
+def test_an_offset_shifts_the_log_odds() -> None:
+    model = default_overtaking()
+    base = float(model.pass_probability(0.5))
+    harder = float(model.pass_probability(0.5, offset=-1.4))
+    assert harder < base
+    logit = np.log(base / (1 - base)) - 1.4
+    assert harder == pytest.approx(1.0 / (1.0 + np.exp(-logit)))
+
+
 def test_pass_probability_handles_a_scalar() -> None:
     model = default_overtaking()
     value = model.pass_probability(0.5, circuit="bahrain", aid="overtake_mode")

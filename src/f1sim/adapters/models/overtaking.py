@@ -70,6 +70,7 @@ class OvertakingModel:
         *,
         circuit: str | None = None,
         aid: str | None = None,
+        offset: float = 0.0,
     ) -> NDArray[np.float64]:
         """Probability that the car behind passes, given its per-lap pace advantage.
 
@@ -77,11 +78,12 @@ class OvertakingModel:
             pace_gap_s: The follower's pace advantage in seconds per lap, positive when faster.
             circuit: Circuit ID for its difficulty offset; None ignores it.
             aid: ``"drs"`` or ``"overtake_mode"``, or None for neither.
+            offset: Extra log-odds, such as the engine's pass-rate calibration.
 
         Returns:
             The pass probability, same shape as ``pace_gap_s``.
         """
-        logit = self.intercept + self.pace_coef * np.asarray(pace_gap_s, dtype=np.float64)
+        logit = self.intercept + offset + self.pace_coef * np.asarray(pace_gap_s, dtype=np.float64)
         if circuit is not None:
             logit = logit + self.difficulty.get(circuit, 0.0)
         if aid is not None:
