@@ -59,6 +59,28 @@ FALLBACK_LAP_S = 90.0
 MIN_RACE_LAPS = 5
 DEFAULT_TOTAL_LAPS = 57
 """Race distance in laps when the circuit length is unknown."""
+RACE_NOISE_PCT = 0.3
+"""Race-day pace noise per car, percent of lap time.
+
+Smaller than the pace model's ``order_noise``, which has to stand in for everything that
+reorders a race; here strategy, stops and passes are simulated, so only the car's own form
+on the day is left. Chosen on 2021, where it matches the real grid-to-finish correlation.
+"""
+CHOOSER_TEMPERATURE_S = 2.0
+"""Softmax scale of the race-day strategy choice, seconds.
+
+The chooser's default (8 s) suits pit-window prediction (P4-10), but the engine charges a
+sampled plan's full time penalty, while a team that runs a different plan does so because it
+is about as fast for them; a sharper choice stops the strategy draw adding seconds of spread.
+"""
+PASS_OFFSET = -1.4
+"""Log-odds added to every pass attempt in the engine.
+
+The pass model is fitted on pairs within 1 s at the line; the engine attempts a pass on any
+lap a car would end within ``MIN_GAP_S`` of the car ahead, which happens more often, so its
+raw pass rate was 1.8 times the real one. This offset matches the simulated on-track passing
+to 2021 (0.56 places gained per lap with no stops).
+"""
 ORDER_NOISE_JITTER = 1e-9
 """Tiny diagonal added before the Cholesky, so a singular covariance still factorises."""
 
@@ -95,12 +117,18 @@ class SimulatorContext:
         circuits: Circuit lengths, for the race distance and the pace cluster.
         rules_dir: Folder holding the season-rules files.
         n_sims: Simulated races per forecast.
+        race_noise_pct: Race-day pace noise per car, percent of lap time.
+        chooser_temperature_s: Softmax scale of the strategy draw, seconds.
+        pass_offset: Log-odds added to every pass attempt.
     """
 
     pace: PaceContext
     circuits: CircuitTable
     rules_dir: Path | None = None
     n_sims: int = N_SIMS
+    race_noise_pct: float = RACE_NOISE_PCT
+    chooser_temperature_s: float = CHOOSER_TEMPERATURE_S
+    pass_offset: float = PASS_OFFSET
 
 
 class SimulatorPredictor:  # pylint: disable=too-many-instance-attributes
@@ -186,6 +214,7 @@ class SimulatorPredictor:  # pylint: disable=too-many-instance-attributes
             pit_loss=draws.pit_loss,
             overtaking=overtaking,
             circuit=circuit,
+            pass_offset=self._context.pass_offset,
         )
         ctx = LapContext(total, tyre.pit_loss_s(circuit), rules.overtake_aid)
         state = starting_state(
@@ -246,7 +275,7 @@ class SimulatorPredictor:  # pylint: disable=too-many-instance-attributes
         self._pace.filter.advance(event.season, event.round)
         mean, cov = self._pace.filter.race_pace(event.season, cluster, drivers, teams)
         n = len(entries)
-        spread = cov + self._context.pace.hyper.order_noise**2 * np.eye(n)
+        spread = cov + self._context.race_noise_pct**2 * np.eye(n)
         chol = np.linalg.cholesky(spread + ORDER_NOISE_JITTER * np.eye(n))
         draws = self._rng.standard_normal((self._context.n_sims, n))
         percent = mean[np.newaxis, :] + draws @ chol.T
@@ -305,7 +334,9 @@ class SimulatorPredictor:  # pylint: disable=too-many-instance-attributes
             plans = generator.plans()
         except InvariantError:
             plans = [_fallback_plan(tyre)]
-        chooser = StrategyChooser(plans, self._tendencies)
+        chooser = StrategyChooser(
+            plans, self._tendencies, temperature=self._context.chooser_temperature_s
+        )
         self._plan_cache[key] = chooser
         return chooser
 
@@ -332,6 +363,7 @@ def _steps(  # pylint: disable=too-many-arguments
     pit_loss: NDArray[np.float64],
     overtaking: OvertakingModel,
     circuit: str,
+    pass_offset: float,
 ) -> list[LapStep]:
     return [
         LapTimeStep(
@@ -346,7 +378,7 @@ def _steps(  # pylint: disable=too-many-arguments
         ),
         DirtyAirStep(),
         PitStopStep(stops, compounds, pit_loss),
-        OvertakeStep(overtaking, circuit=circuit),
+        OvertakeStep(overtaking, circuit=circuit, pass_offset=pass_offset),
     ]
 
 
