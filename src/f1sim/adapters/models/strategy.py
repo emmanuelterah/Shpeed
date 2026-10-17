@@ -273,29 +273,30 @@ class StrategyGenerator:  # pylint: disable=too-many-instance-attributes
         min_stint = MIN_STINT_LAPS
         if self.total_laps < n_stints * min_stint:
             return None
-        infinity = np.inf
-        dp = np.full((n_stints, self.total_laps + 1), infinity, dtype=np.float64)
+        dp = np.full((n_stints, self.total_laps + 1), np.inf, dtype=np.float64)
         choice = np.full((n_stints, self.total_laps + 1), -1, dtype=np.int64)
         for stint in range(n_stints):
             remaining = n_stints - 1 - stint
             first_ok = (stint + 1) * min_stint
             last_ok = self.total_laps - remaining * min_stint
+            table = self._costs.table(compounds[stint])
+            if stint == 0:
+                dp[0, first_ok : last_ok + 1] = table[1, first_ok : last_ok + 1]
+                continue
+            low = stint * min_stint
             for last in range(first_ok, last_ok + 1):
-                if stint == 0:
-                    dp[0, last] = self._costs(compounds[0], 1, last)
+                # Stops after laps low..last - min_stint; the stint then runs prev + 1..last.
+                high = last - min_stint
+                candidates = (
+                    dp[stint - 1, low : high + 1]
+                    + self._stop_cost
+                    + table[low + 1 : high + 2, last]
+                )
+                if not np.isfinite(candidates).any():
                     continue
-                best, arg = infinity, -1
-                for prev in range(stint * min_stint, last - min_stint + 1):
-                    if not np.isfinite(dp[stint - 1, prev]):
-                        continue
-                    candidate = (
-                        dp[stint - 1, prev]
-                        + self._stop_cost
-                        + self._costs(compounds[stint], prev + 1, last)
-                    )
-                    if candidate < best:
-                        best, arg = candidate, prev
-                dp[stint, last], choice[stint, last] = best, arg
+                best = int(np.argmin(candidates))
+                dp[stint, last] = candidates[best]
+                choice[stint, last] = low + best
         if not np.isfinite(dp[n_stints - 1, self.total_laps]):
             return None
         stop_laps = self._trace(choice, n_stints)
@@ -530,18 +531,32 @@ class _StintCosts:
     ) -> None:
         self.total_laps = total_laps
         self._tables: dict[str, NDArray[np.float64]] = {}
+        laps = np.arange(total_laps + 1, dtype=np.float64)
+        fuel = tyre.fuel_s_per_lap * (total_laps - laps)
         for compound in compounds:
             offset = tyre.compound_offset(compound)
-            fuel = tyre.fuel_s_per_lap
+            loss = np.array(
+                [tyre.loss(compound, circuit, float(age)) for age in range(total_laps + 1)],
+                dtype=np.float64,
+            )
             table = np.full((total_laps + 1, total_laps + 1), np.inf, dtype=np.float64)
             for first in range(1, total_laps + 1):
-                running = 0.0
-                for last in range(first, total_laps + 1):
-                    age = float(last - first + 1)
-                    loss = tyre.loss(compound, circuit, age)
-                    running += base_lap_s + offset + loss + fuel * (total_laps - last)
-                    table[first, last] = running
+                ages = np.arange(1, total_laps - first + 2)
+                per_lap = base_lap_s + offset + loss[ages] + fuel[first:]
+                table[first, first:] = np.cumsum(per_lap)
             self._tables[compound] = table
+
+    def table(self, compound: str) -> NDArray[np.float64]:
+        """The whole cost table of a compound, ``table[first, last]``.
+
+        Args:
+            compound: Compound name.
+
+        Returns:
+            Array of shape ``(total_laps + 1, total_laps + 1)``; infinite where undefined.
+        """
+        missing = np.full((self.total_laps + 1, self.total_laps + 1), np.inf, dtype=np.float64)
+        return self._tables.get(compound, missing)
 
     def __call__(self, compound: str, first: int, last: int) -> float:
         """Cost of one stint.

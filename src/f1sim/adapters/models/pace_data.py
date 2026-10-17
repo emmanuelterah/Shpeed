@@ -28,6 +28,7 @@ from numpy.typing import NDArray
 from f1sim.adapters.models.pace_corrections import (
     EVOLUTION_PRIOR,
     FUEL_PRIOR,
+    MAD_TO_SD,
     CircuitHistory,
     Estimate,
     SessionFit,
@@ -54,6 +55,11 @@ MIN_DRIVERS = 4
 """Drivers a session needs before its median is a meaningful reference."""
 
 PERCENT = 100.0
+
+OBS_OUTLIER_SDS = 4.0
+"""A driver further than this many robust deviations from the session median is dropped."""
+OBS_MIN_SD = 0.25
+"""Floor on a session's robust spread, percent, so a tight field does not drop real gaps."""
 
 _Key = tuple[int, int, str]
 
@@ -316,6 +322,23 @@ def _counts(laps: pd.DataFrame) -> dict[str, int]:
     return {str(k): int(v) for k, v in counts.items()}
 
 
+def _drop_outliers(
+    drivers: list[str], seconds: NDArray[np.float64]
+) -> tuple[list[str], NDArray[np.float64]]:
+    """Drop drivers whose session pace is far from the field's.
+
+    A driver whose only timed laps were compromised (an aborted lap, a red flag, a drying
+    track) can sit tens of percent off the field. A Gaussian filter would either let that
+    pollute the driver's and team's effects or, when the noise is fitted, treat the whole
+    session type as noise, so such drivers are left out of the session's observation.
+    """
+    percent = PERCENT * (seconds - np.median(seconds)) / np.median(seconds)
+    deviation = np.abs(percent - np.median(percent))
+    spread = max(MAD_TO_SD * float(np.median(deviation)), OBS_MIN_SD)
+    keep = deviation <= OBS_OUTLIER_SDS * spread
+    return [d for d, k in zip(drivers, keep.tolist(), strict=True) if k], seconds[keep]
+
+
 def _to_obs(
     fit: SessionFit | None,
     laps: pd.DataFrame,
@@ -331,6 +354,9 @@ def _to_obs(
     if len(drivers) < MIN_DRIVERS:
         return None
     seconds = np.array([fit.drivers[d] for d in drivers], dtype=np.float64)
+    drivers, seconds = _drop_outliers(drivers, seconds)
+    if len(drivers) < MIN_DRIVERS:
+        return None
     reference = float(np.median(seconds))
     team_of = dict(
         zip(

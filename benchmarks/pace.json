@@ -20,6 +20,26 @@
         "spearman": 0.578937,
         "races": 44.0
       }
+    },
+    {
+      "recorded_at": "2026-10-17T19:48:10+00:00",
+      "git_commit": "e4105aa27166f254d8a8bf63e0b0a3da8ad213e0-dirty",
+      "snapshot_id": 10,
+      "seasons": [
+        2021,
+        2022
+      ],
+      "seed": 20261012,
+      "skipped": 0,
+      "summary": {
+        "brier_win": 0.036055,
+        "brier_podium": 0.079459,
+        "brier_top10": 0.168942,
+        "log_loss": 2.582961,
+        "rps": 0.131188,
+        "spearman": 0.751457,
+        "races": 44.0
+      }
     }
   ]
 }

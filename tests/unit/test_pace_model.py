@@ -92,6 +92,18 @@ def _filter(hyper: PaceHyper = FITTED) -> PaceFilter:
     return PaceFilter(hyper, load_team_lineage(), load_engine_suppliers())
 
 
+def test_a_driver_far_off_the_field_is_left_out_of_the_session(world: World) -> None:
+    laps = world.tables["laps"]
+    victim = DRIVERS[0]
+    slow = (laps["round"] == 1) & (laps["session"] == "Q") & (laps["driver_id"] == victim)
+    spoiled = laps.assign(lap_time_s=laps["lap_time_s"].where(~slow, laps["lap_time_s"] * 1.4))
+    obs = build_observations(spoiled, world.tables["events"], load_circuits())
+    quali = next(o for o in obs if (o.round, o.session) == (1, "Q"))
+    assert victim not in quali.drivers
+    assert len(quali.drivers) == len(DRIVERS) - 1
+    assert abs(float(np.median(quali.values))) < 1e-9
+
+
 def test_observations_track_the_true_pace(world: World, observations: list[SessionObs]) -> None:
     by_session = {(o.season, o.round, o.session): o for o in observations}
     assert len(by_session) == 3 * 6 * 3

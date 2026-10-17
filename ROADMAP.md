@@ -31,7 +31,7 @@ Snapshot of the Shpeed Roadmap tracker, 11 Oct 2026. The tracker is the source o
 | 2 · Baselines & evaluation | 5–6 | 9 Nov – 22 Nov 2026 | 0/13 | open |  |
 | 3 · Pace model | 7–10 | 23 Nov – 20 Dec 2026 | 0/11 | open |  |
 | 4 · Tyres & strategy | 11–13 | 21 Dec – 10 Jan 2027 | 0/8 | open |  |
-| 5 · Race simulator | 14–16 | 11 Jan – 31 Jan 2027 | 0/13 | open | v0.1 |
+| 5 · Race simulator | 14–16 | 11 Jan – 31 Jan 2027 | 0/13 | open (12 in review; beats Plackett–Luce on 2021–2022, 2023–2025 laps still to sync) | v0.1 |
 | 6 · Race events | 17–19 | 1 Feb – 21 Feb 2027 | 0/6 | open |  |
 | 7 · Regulation-reset study | 20–22 | 22 Feb – 14 Mar 2027 | 0/5 | open |  |
 | 8 · Delivery | 23–24 | 15 Mar – 28 Mar 2027 | 0/15 | open |  |
@@ -164,18 +164,18 @@ Snapshot of the Shpeed Roadmap tracker, 11 Oct 2026. The tracker is the source o
 
 | | ID | Feature | Area | Priority | Done when | Depends on | Principles |
 |---|---|---|---|---|---|---|---|
-| ⬜ | `P5-01` | Vectorised race state | Sim | must | RaceState arrays of shape N × cars: order, gaps, compound, tyre age, fuel, pit status. | P2-01 | SOLID:SRP |
-| ⬜ | `P5-02` | Pluggable lap-step pipeline | Sim | must | Engine runs an ordered list of LapStep objects; adding an event type needs no engine edit. | P5-01, P0-04 | SOLID:OCP, SOLID:ISP |
-| ⬜ | `P5-03` | Lap-time sampling from posterior draws | Sim | must | Each run draws pace and degradation parameters; noise from driver consistency. | P5-02, P3-09, P4-01 |  |
-| ⬜ | `P5-04` | Overtaking model | Models | must | Pass probability from pace gap and circuit difficulty, fitted on historical position changes. | P1-08 |  |
-| ⬜ | `P5-05` | Dirty-air following penalty | Sim | must | Lap-time loss when within ~1 s of the car ahead. | P5-02 |  |
-| ⬜ | `P5-06` | Era-specific overtake aid | Sim | must | DRS (to 2025) vs Overtake Mode (2026) read from rules config. | P5-04, P4-06 | SOLID:OCP |
-| ⬜ | `P5-07` | Pit-stop execution step | Sim | must | Stops executed from each driver's sampled plan with sampled stationary time. | P4-05, P4-08 |  |
-| ⬜ | `P5-08` | Starting state from grid | Sim | must | Grid after penalties and pit-lane starts applied before lap 1. | P5-01 |  |
-| ⬜ | `P5-09` | Seeded, reproducible runs | Sim | must | Same seed + snapshot + model version gives a bit-identical matrix. | P5-02 |  |
-| ⬜ | `P5-10` | Simulator property tests | Quality | must | Valid ordering every lap, non-negative gaps, every car finishes or is DNF. | P5-02 |  |
-| ⬜ | `P5-11` | Performance benchmark in CI | Quality | must | 10,000 runs of one race under 1 minute; pytest-benchmark tracks it. | P5-03 |  |
-| ⬜ | `P5-12` | Aggregate runs into PositionMatrix | Sim | must | Finishing orders across runs become the matrix plus P(DNF). | P5-02 |  |
+| 🔍 | `P5-01` | Vectorised race state | Sim | must | RaceState arrays of shape N × cars: order, gaps, compound, tyre age, fuel, pit status. | P2-01 | SOLID:SRP |
+| 🔍 | `P5-02` | Pluggable lap-step pipeline | Sim | must | Engine runs an ordered list of LapStep objects; adding an event type needs no engine edit. | P5-01, P0-04 | SOLID:OCP, SOLID:ISP |
+| 🔍 | `P5-03` | Lap-time sampling from posterior draws | Sim | must | Each run draws pace and degradation parameters; noise from driver consistency. | P5-02, P3-09, P4-01 |  |
+| 🔍 | `P5-04` | Overtaking model | Models | must | Pass probability from pace gap and circuit difficulty, fitted on historical position changes. | P1-08 |  |
+| 🔍 | `P5-05` | Dirty-air following penalty | Sim | must | Lap-time loss when within ~1 s of the car ahead. | P5-02 |  |
+| 🔍 | `P5-06` | Era-specific overtake aid | Sim | must | DRS (to 2025) vs Overtake Mode (2026) read from rules config. | P5-04, P4-06 | SOLID:OCP |
+| 🔍 | `P5-07` | Pit-stop execution step | Sim | must | Stops executed from each driver's sampled plan with sampled stationary time. | P4-05, P4-08 |  |
+| 🔍 | `P5-08` | Starting state from grid | Sim | must | Grid after penalties and pit-lane starts applied before lap 1. | P5-01 |  |
+| 🔍 | `P5-09` | Seeded, reproducible runs | Sim | must | Same seed + snapshot + model version gives a bit-identical matrix. | P5-02 |  |
+| 🔍 | `P5-10` | Simulator property tests | Quality | must | Valid ordering every lap, non-negative gaps, every car finishes or is DNF. | P5-02 |  |
+| 🔍 | `P5-11` | Performance benchmark in CI | Quality | must | 10,000 runs of one race under 1 minute; pytest-benchmark tracks it. | P5-03 |  |
+| 🔍 | `P5-12` | Aggregate runs into PositionMatrix | Sim | must | Finishing orders across runs become the matrix plus P(DNF). | P5-02 |  |
 | ⬜ | `P5-13` | Release v0.1 (MVP) | Process | must | Gate passed; tagged and changelog written. | P5-12 |  |
 
 ## Phase 6 — Race events
