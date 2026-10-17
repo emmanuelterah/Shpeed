@@ -97,7 +97,7 @@ Snapshot of the Shpeed Roadmap tracker, 11 Oct 2026. The tracker is the source o
 
 **Goal:** Know what good looks like before building anything clever.
 
-**Gate:** Baseline scores for 2022–2025 are recorded in the repo; Plackett–Luce is the bar to clear.
+**Gate:** Baseline scores for 2021–2022 are recorded in the repo; Plackett–Luce is the bar to clear.
 
 | | ID | Feature | Area | Priority | Done when | Depends on | Principles |
 |---|---|---|---|---|---|---|---|

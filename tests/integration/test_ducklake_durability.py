@@ -1,9 +1,10 @@
 """DuckLake-specific guarantees: crash safety, durability, single writer, verification."""
 
+import json
 import subprocess
 import sys
 import textwrap
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -11,7 +12,7 @@ import pytest
 from f1sim.adapters.store.ducklake_store import DuckLakeStore
 from f1sim.adapters.store.lock import writer_lock
 from f1sim.core.errors import StoreBusyError
-from tests.support import T0, lap_rows
+from tests.support import T0, lap_rows, ledger_rows, result_rows
 
 LATER = T0 + timedelta(days=7)
 REPO = Path(__file__).resolve().parents[2]
@@ -60,6 +61,67 @@ def test_second_writer_is_refused_while_lock_is_held(tmp_path: Path) -> None:
     store = DuckLakeStore(tmp_path / "lake")
     with writer_lock(tmp_path / "lake"), pytest.raises(StoreBusyError):
         store.commit({"laps": lap_rows()}, run_id="blocked")
+    store.close()
+
+
+def test_sync_metadata_records_snapshot_sources_and_row_counts(tmp_path: Path) -> None:
+    store = DuckLakeStore(tmp_path / "lake")
+    snap = store.commit(
+        {"laps": lap_rows(), "results": result_rows(), "_ingested": ledger_rows("fastf1")},
+        run_id="run-7",
+    )
+    row = store._con.execute(
+        "SELECT run_id, snapshot_id, sources, versions, row_counts FROM lake._sync_runs"
+    ).fetchone()
+    assert row is not None
+    run_id, recorded, sources, versions, counts = row
+    assert run_id == "run-7"
+    assert recorded == int(snap)
+    assert json.loads(sources) == ["fastf1"]
+    assert "f1sim" in json.loads(versions)
+    assert json.loads(counts)["laps"] == 10
+    assert json.loads(counts)["results"] == 2
+    assert store.verify().ok
+    store.close()
+
+
+def test_sync_metadata_records_correct_snapshot_after_reopening(tmp_path: Path) -> None:
+    root = tmp_path / "lake"
+    first = DuckLakeStore(root)
+    snap_a = first.commit({"laps": lap_rows(round_=1)}, run_id="a")
+    first.close()
+
+    second = DuckLakeStore(root)
+    snap_b = second.commit({"laps": lap_rows(round_=2)}, run_id="b")
+    recorded = {
+        run_id: int(snapshot_id)
+        for run_id, snapshot_id in second._con.execute(
+            "SELECT run_id, snapshot_id FROM lake._sync_runs"
+        ).fetchall()
+    }
+    assert recorded == {"a": int(snap_a), "b": int(snap_b)}
+    assert second.verify().ok
+    second.close()
+
+
+def test_verify_detects_row_counts_that_disagree_with_metadata(tmp_path: Path) -> None:
+    store = DuckLakeStore(tmp_path / "lake")
+    snap = store.commit({"laps": lap_rows()}, run_id="a")
+    store._con.execute("DELETE FROM lake._sync_runs")
+    store._con.execute(
+        "INSERT INTO lake._sync_runs VALUES (?, ?, ?, ?, ?, ?)",
+        [
+            "a",
+            int(snap),
+            datetime(2025, 3, 16),
+            json.dumps([]),
+            json.dumps({"f1sim": "0.0.0"}),
+            json.dumps({"laps": 999}),
+        ],
+    )
+    report = store.verify()
+    assert not report.ok
+    assert report.mismatched == {"laps": (999, 10)}
     store.close()
 
 

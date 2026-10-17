@@ -1,14 +1,15 @@
-"""FastF1 source adapter (P1-02): laps, tyre stints, weather and track status, 2018 onwards.
+"""FastF1 source adapter (P1-02): laps, stints, weather, track status and race control.
 
-It owns the ``laps``, ``weather`` and ``track_status`` tables. Drivers and teams are keyed
-by the Jolpica/Ergast IDs that FastF1 includes in session results (P1-05).
+It owns the ``laps``, ``stints``, ``weather``, ``track_status`` and ``race_control``
+tables. Drivers and teams are keyed by the Jolpica/Ergast IDs that FastF1 includes in
+session results (P1-05).
 
 FastF1 is reached through two injected callables (see ``fastf1_loaders``), so tests can
 supply fake sessions without downloading anything.
 """
 
 from collections.abc import Callable, Mapping, Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -64,13 +65,13 @@ class SessionLike(Protocol):
         ...
 
     @property
-    def date(self) -> pd.Timestamp:
-        """Scheduled session start, in UTC."""
+    def race_control_messages(self) -> pd.DataFrame | None:
+        """Race-control messages (flags, safety car, investigations and so on)."""
         ...
 
     @property
-    def t0_date(self) -> pd.Timestamp:
-        """Wall-clock time of FastF1's session time zero, in UTC."""
+    def date(self) -> pd.Timestamp:
+        """Scheduled session start, in UTC."""
         ...
 
 
@@ -163,7 +164,8 @@ class FastF1Adapter:
             session: Any session of a weekend.
 
         Returns:
-            ``laps`` (with the ``clean_lap`` flag), ``weather`` and ``track_status``.
+            ``laps`` (with the ``clean_lap`` flag) and the ``stints`` derived from them,
+            ``weather``, ``track_status`` and ``race_control``.
 
         Raises:
             DataError: If FastF1 cannot load the session or it has no laps.
@@ -177,19 +179,54 @@ class FastF1Adapter:
             raise DataError(f"FastF1 could not load {session}: {exc}") from exc
         if laps_raw is None or len(laps_raw) == 0:
             raise DataError(f"FastF1 has no laps for {session}")
-        start = pd.Timestamp(s.date).to_pydatetime().replace(tzinfo=None)
+        start = _naive_utc(s.date)
         available_at = start + SESSION_DURATION[session.session.value]
-        t0 = pd.Timestamp(s.t0_date)
+        t0 = _session_zero(laps_raw)
         base = {"season": e.season, "round": e.round, "session": session.session.value}
         return {
             "laps": _laps(laps_raw, s.results, base, available_at, session),
+            "stints": _stints(laps_raw, s.results, base, available_at),
             "weather": _weather(s.weather_data, t0, base, available_at),
             "track_status": _track_status(s.track_status, t0, base, available_at),
+            "race_control": _race_control(s.race_control_messages, t0, base, available_at),
         }
 
 
 def _seconds(series: "pd.Series[Any]") -> "pd.Series[float]":
     return pd.to_timedelta(series).dt.total_seconds()
+
+
+def _naive_utc(stamp: Any) -> datetime:
+    """Convert a date or timestamp to a naive UTC datetime."""
+    ts = pd.Timestamp(stamp)
+    return (ts.tz_convert(UTC) if ts.tzinfo is not None else ts).tz_localize(None).to_pydatetime()
+
+
+def _session_zero(laps: pd.DataFrame) -> pd.Timestamp:
+    """Wall-clock time of FastF1's session time zero, from the lap start stamps.
+
+    FastF1 only exposes ``Session.t0_date`` after loading telemetry; deriving it from the
+    laps avoids that heavy download.
+    """
+    starts = laps[["LapStartDate", "LapStartTime"]].dropna()
+    if len(starts) == 0:
+        return pd.Timestamp(0)
+    offsets = starts["LapStartDate"] - pd.to_timedelta(starts["LapStartTime"])
+    return pd.Timestamp(offsets.max())
+
+
+def _utc_times(times: "pd.Series[Any]", t0: pd.Timestamp) -> "pd.Series[Any]":
+    """Turn a session-relative ``Time`` column into naive UTC timestamps."""
+    shifted = t0 + pd.to_timedelta(times)
+    return shifted.dt.tz_localize(None) if t0.tzinfo is not None else shifted
+
+
+def _clean_id(value: Any) -> str | None:
+    """A usable canonical ID, or None for missing, empty or ``"nan"`` values."""
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    return None if not text or text.lower() == "nan" else text
 
 
 def _driver_keys(results: pd.DataFrame | None) -> tuple[dict[str, str], dict[str, str]]:
@@ -198,12 +235,12 @@ def _driver_keys(results: pd.DataFrame | None) -> tuple[dict[str, str], dict[str
     if results is None or len(results) == 0:
         return ids, teams
     for _, r in results.iterrows():
-        code = str(r.get("Abbreviation", ""))
-        driver_id = r.get("DriverId")
-        team_id = r.get("TeamId")
-        if code and isinstance(driver_id, str) and driver_id:
+        code = _clean_id(r.get("Abbreviation"))
+        driver_id = _clean_id(r.get("DriverId"))
+        team_id = _clean_id(r.get("TeamId"))
+        if code and driver_id:
             ids[code] = driver_id
-        if code and isinstance(team_id, str) and team_id:
+        if code and team_id:
             teams[code] = team_id
     return ids, teams
 
@@ -227,7 +264,7 @@ def _laps(
     available_at: datetime,
     session: SessionKey,
 ) -> pd.DataFrame:
-    raw = raw[raw["LapNumber"].notna()]
+    raw = raw[raw["LapNumber"].notna() & raw["Driver"].notna()]
     ids, teams = _driver_keys(results)
     codes = raw["Driver"].astype(str)
     missing = sorted(set(codes) - set(ids))
@@ -258,7 +295,7 @@ def _laps(
             "deleted": raw["Deleted"].astype("boolean").fillna(False)
             if "Deleted" in raw
             else False,
-            "lap_start_utc": pd.to_datetime(raw["LapStartDate"]),
+            "lap_start_utc": pd.to_datetime(raw["LapStartDate"], utc=True).dt.tz_localize(None),
             "available_at": available_at,
         }
     ).reset_index(drop=True)
@@ -272,6 +309,75 @@ def _laps(
     return df.reset_index(drop=True)
 
 
+def _stints(
+    raw: pd.DataFrame,
+    results: pd.DataFrame | None,
+    base: dict[str, Any],
+    available_at: datetime,
+) -> pd.DataFrame:
+    """One row per driver's stint, derived from the session's laps."""
+    laps = raw.loc[raw["LapNumber"].notna() & raw["Stint"].notna() & raw["Driver"].notna()]
+    ids, _ = _driver_keys(results)
+    codes = laps["Driver"].astype(str)
+    grouped = (
+        laps.assign(
+            driver_id=codes.map(lambda c: ids.get(c, f"code:{c.lower()}")),
+            lap=laps["LapNumber"].astype(int),
+            stint=laps["Stint"].astype(int),
+        )
+        .groupby(["driver_id", "stint"], sort=True)
+        .agg(start_lap=("lap", "min"), end_lap=("lap", "max"), compound=("Compound", "first"))
+        .reset_index()
+    )
+    return pd.DataFrame(
+        {
+            **base,
+            "driver_id": grouped["driver_id"],
+            "stint": grouped["stint"].astype(int),
+            "compound": grouped["compound"].astype("string"),
+            "start_lap": grouped["start_lap"].astype(int),
+            "end_lap": grouped["end_lap"].astype(int),
+            "available_at": available_at,
+        }
+    ).reset_index(drop=True)
+
+
+def _optional_text(raw: pd.DataFrame, column: str) -> "pd.Series[Any]":
+    if column not in raw:
+        return pd.Series(pd.NA, index=raw.index, dtype="string")
+    return raw[column].astype("string")
+
+
+def _optional_numeric(raw: pd.DataFrame, column: str) -> "pd.Series[Any]":
+    if column not in raw:
+        return pd.Series(pd.NA, index=raw.index, dtype="Float64")
+    return pd.to_numeric(raw[column], errors="coerce")
+
+
+def _race_control(
+    raw: pd.DataFrame | None, _t0: pd.Timestamp, base: dict[str, Any], available_at: datetime
+) -> pd.DataFrame:
+    if raw is None or len(raw) == 0:
+        return pd.DataFrame()
+    # Race-control messages carry a wall-clock UTC time, not a session-relative one.
+    number = "RacingNumber" if "RacingNumber" in raw else "DriverNumber"
+    df = pd.DataFrame(
+        {
+            **base,
+            "time_utc": pd.to_datetime(raw["Time"], utc=True).dt.tz_localize(None),
+            "category": raw["Category"].astype("string"),
+            "message": raw["Message"].astype("string"),
+            "flag": _optional_text(raw, "Flag"),
+            "scope": _optional_text(raw, "Scope"),
+            "sector": _optional_numeric(raw, "Sector"),
+            "driver_number": _optional_numeric(raw, number),
+            "lap": _optional_numeric(raw, "Lap"),
+            "available_at": available_at,
+        }
+    )
+    return df.drop_duplicates(subset=["time_utc", "message"], keep="first").reset_index(drop=True)
+
+
 def _weather(
     raw: pd.DataFrame | None, t0: pd.Timestamp, base: dict[str, Any], available_at: datetime
 ) -> pd.DataFrame:
@@ -280,9 +386,7 @@ def _weather(
     df = pd.DataFrame(
         {
             **base,
-            "time_utc": (t0 + pd.to_timedelta(raw["Time"])).dt.tz_localize(None)
-            if getattr(t0, "tzinfo", None)
-            else t0 + pd.to_timedelta(raw["Time"]),
+            "time_utc": _utc_times(raw["Time"], t0),
             "air_temp_c": raw["AirTemp"],
             "track_temp_c": raw["TrackTemp"],
             "humidity_pct": raw["Humidity"],
@@ -304,7 +408,7 @@ def _track_status(
     df = pd.DataFrame(
         {
             **base,
-            "time_utc": t0 + pd.to_timedelta(raw["Time"]),
+            "time_utc": _utc_times(raw["Time"], t0),
             "status": raw["Status"].astype(str),
             "message": raw["Message"].astype("string"),
             "available_at": available_at,

@@ -299,6 +299,17 @@ def test_state_files_are_atomic_and_pick_the_newest_snapshot(tmp_path: Path) -> 
         files.save(StateKey("../pace", "1", event, SnapshotId(1)), {})
 
 
+def test_sessions_before_the_first_race_are_observed_once(world: World) -> None:
+    laps = world.tables["laps"]
+    before_any_race = laps.loc[laps["session"] != "R"]
+    store = InMemoryStore()
+    store.commit({**world.tables, "laps": before_any_race}, run_id="opening")
+    model = PacePredictor(0, pace_context(ModelOptions(pace_hyper=FITTED)))
+    model.fit(store, snapshot=store.latest_snapshot(), cutoff=datetime(2024, 12, 31))
+    sessions = before_any_race[["season", "round", "session"]].drop_duplicates().shape[0]
+    assert model.report.sessions == sessions
+
+
 def test_pace_model_without_laps_is_uninformed() -> None:
     empty = InMemoryStore()
     empty.commit({"results": synthetic_results(seasons=(2023,), rounds=1)}, run_id="none")

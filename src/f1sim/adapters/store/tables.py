@@ -5,8 +5,8 @@ the end of its session). Readers only return rows with ``available_at <= as_of``
 what stops a forecast or backtest from seeing the future.
 
 Ownership is explicit so two sources never write the same rows:
-  jolpica -> events, results, pit_stops
-  fastf1  -> laps, weather, track_status
+  jolpica -> events, results, pit_stops, standings
+  fastf1  -> laps, stints, weather, track_status, race_control
 """
 
 from dataclasses import dataclass
@@ -162,6 +162,52 @@ TABLES: dict[str, TableSpec] = {
             },
             replace_key=("season", "round", "session"),
             unique=("season", "round", "session", "time_utc", "status"),
+        ),
+        TableSpec(
+            "stints",
+            {
+                **_SESSION,
+                "driver_id": TEXT,
+                "stint": INT,
+                "compound": TEXT,
+                "start_lap": INT,
+                "end_lap": INT,
+                "available_at": TS,
+            },
+            replace_key=("season", "round", "session"),
+            unique=("season", "round", "session", "driver_id", "stint"),
+        ),
+        TableSpec(
+            "race_control",
+            {
+                **_SESSION,
+                "time_utc": TS,
+                "category": TEXT,
+                "message": TEXT,
+                "flag": TEXT,
+                "scope": TEXT,
+                "sector": INT,
+                "driver_number": INT,
+                "lap": INT,
+                "available_at": TS,
+            },
+            replace_key=("season", "round", "session"),
+            unique=("season", "round", "session", "time_utc", "message"),
+        ),
+        TableSpec(
+            "standings",
+            {
+                "season": INT,
+                "round": INT,
+                "scope": TEXT,
+                "subject_id": TEXT,
+                "position": INT,
+                "points": FLOAT,
+                "wins": INT,
+                "available_at": TS,
+            },
+            replace_key=("season", "round", "scope"),
+            unique=("season", "round", "scope", "subject_id"),
         ),
         TableSpec(
             "_ingested",
