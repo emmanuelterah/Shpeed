@@ -29,6 +29,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - The test network guard allows loopback sockets, so the API tests run on Windows.
 
 ### Added
+- Phase 4 tyres and pit strategy (P4-01 to P4-10):
+  - pooled per-compound degradation curves with a spline that bends up into a cliff, shrunk
+    per circuit toward the global shape (P4-01);
+  - a warm-up penalty on the first two laps of a stint, held out of the fit (P4-02), and an
+    optional track-temperature interaction kept only if it improves held-out error (P4-03);
+  - pit loss per circuit measured from the in- and out-laps (it already includes the stop,
+    P4-04) and a per-team pit-lane stop-duration distribution with a slow-stop tail (P4-05);
+  - season rules in `configs/rules/<season>.yaml` (2018-2026) validated by `SeasonRules` and
+    loaded by `f1sim.adapters.config_files` (P4-06);
+  - a strategy generator that enumerates legal one- to three-stop plans and their expected
+    race time (P4-07), a softmax chooser mixing the optimum with team tendencies (P4-08), and
+    a tyre-sets-remaining limit on the plans (P4-09);
+  - a pit-window calibration report, the Phase 4 gate: windows are the chooser's mean stop lap
+    widened by a stop-lap spread learned from training residuals, and the report measures the
+    share of actual stops inside them per circuit (P4-10);
+  - `f1sim tyres fit | check | windows` and ADR-0007 (tyres and strategy design).
 - Domain entities for the F1 data (P1-01): frozen `Season`, `Event`, `Session`, `Driver`,
   `Team`, `Lap`, `Stint`, `PitStop`, `TrackStatus`, `RaceControl`, `Result` and `Standing`
   value objects, each buildable from its canonical table row.

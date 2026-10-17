@@ -14,7 +14,8 @@ import yaml
 from f1sim.adapters.models.pace_filter import PaceHyper
 from f1sim.core.domain.lineage import TeamLineage
 from f1sim.core.domain.reference import CircuitTable, EngineSuppliers
-from f1sim.core.errors import DataError
+from f1sim.core.domain.rules import SeasonRules
+from f1sim.core.errors import DataError, ValidationError
 
 TEAM_LINEAGE_RESOURCE = "team_lineage.yaml"
 CIRCUITS_RESOURCE = "circuits.yaml"
@@ -86,6 +87,37 @@ def load_engine_suppliers(path: Path | None = None) -> EngineSuppliers:
             for season, teams in seasons.items()
         },
     )
+
+
+def load_season_rules(season: int, directory: Path | None = None) -> SeasonRules:
+    """Load one season's rules from ``configs/rules/<season>.yaml`` (P4-06).
+
+    Args:
+        season: Championship year.
+        directory: Folder holding the rules files; defaults to ``configs/rules``.
+
+    Returns:
+        The validated rules.
+
+    Raises:
+        DataError: If the file is missing or cannot be read.
+        ValidationError: If the file does not validate, or names a different season.
+    """
+    folder = directory if directory is not None else Path("configs/rules")
+    path = folder / f"{season}.yaml"
+    if not path.exists():
+        raise DataError(f"no rules file for {season}: expected {path}")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise DataError(f"Cannot read {path}: {exc}") from exc
+    data: Any = yaml.safe_load(text)
+    if not isinstance(data, dict):
+        raise ValidationError(f"{path} must contain a mapping")
+    rules = SeasonRules.from_mapping(cast(dict[str, Any], data), str(path))
+    if rules.season != season:
+        raise ValidationError(f"{path} declares season {rules.season}, expected {season}")
+    return rules
 
 
 def load_pace_hyper(path: Path) -> PaceHyper:

@@ -1,0 +1,12 @@
+# 2019 regulations. Loaded and validated by f1sim (P4-06).
+season: 2019
+race_distance_km: 305            # minimum race distance
+dry_compounds_per_event: 3
+mandatory_compound_change: true
+overtake_aid: drs
+active_aero: false
+sprint_format: null
+power_unit:
+  mguh: true
+  mguk_kw: 120
+notes: "DRS era; three dry compounds; no sprints."
