@@ -46,6 +46,12 @@ def test_window_hits_skips_drivers_without_actual_stops() -> None:
     assert window_hits({"a": [PitWindow(0, 10, 20)]}, {}) == (0, 0)
 
 
+def test_window_hits_matches_by_stop_index() -> None:
+    predicted = {"a": [PitWindow(1, 40, 50)]}
+    actual = {"a": [5, 45]}
+    assert window_hits(predicted, actual) == (1, 1)
+
+
 def test_calibration_measures_held_out_races() -> None:
     tables = build_tyres_world().tables
     reader = StubReader(dict(tables))

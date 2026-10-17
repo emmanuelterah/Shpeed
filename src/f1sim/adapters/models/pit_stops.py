@@ -32,6 +32,21 @@ SLOW_MADS = 2.0
 MIN_STOP_SAMPLES = 2
 
 
+def race_stops(pit_stops: pd.DataFrame) -> pd.DataFrame:
+    """Keep only race pit stops.
+
+    The canonical store may hold stops from practice and qualifying, but strategy is about the
+    race, so only the ``R`` session is used.
+
+    Args:
+        pit_stops: Canonical ``pit_stops`` rows.
+
+    Returns:
+        The race sessions' rows.
+    """
+    return pit_stops.loc[pit_stops["session"].astype(str) == "R"]
+
+
 @dataclass(frozen=True)
 class StopTimeDistribution:
     """A team's pit-stop duration: a normal core with a slow-stop tail (P4-05).
@@ -217,6 +232,8 @@ def measure_pit_loss(laps: pd.DataFrame, events: pd.DataFrame) -> dict[str, Esti
 def fit_stop_times(pit_stops: pd.DataFrame, laps: pd.DataFrame) -> StopTimeModel:
     """Fit stop-duration distributions per team (P4-05).
 
+    Only race stops are used.
+
     Args:
         pit_stops: Canonical ``pit_stops`` rows.
         laps: Canonical ``laps`` rows, to map drivers to teams.
@@ -231,7 +248,7 @@ def fit_stop_times(pit_stops: pd.DataFrame, laps: pd.DataFrame) -> StopTimeModel
     }
     by_team: dict[str, list[float]] = {}
     everything: list[float] = []
-    for row in _records(pit_stops):
+    for row in _records(race_stops(pit_stops)):
         if row["duration_s"] is None or pd.isna(row["duration_s"]):
             continue
         duration = float(row["duration_s"])

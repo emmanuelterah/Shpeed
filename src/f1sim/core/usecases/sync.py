@@ -109,7 +109,7 @@ class _Collector:
         self.fetched.append((source.name, session))
 
 
-def sync_season(
+def sync_season(  # pylint: disable=too-many-arguments
     season: int,
     *,
     sources: Sequence[SourceAdapter],
@@ -118,6 +118,7 @@ def sync_season(
     run_id: str,
     now: datetime,
     on_progress: ProgressCallback | None = None,
+    force: bool = False,
 ) -> SyncReport:
     """Fetch every new session of a season from every source and commit them together.
 
@@ -129,6 +130,8 @@ def sync_season(
         run_id: ID of this run, recorded with the commit and the ledger rows.
         now: Current UTC time, recorded as the ingestion time.
         on_progress: Optional callback before each fetch, for progress output.
+        force: Re-fetch sessions a source has already stored and replace their rows, so a
+            change in how this program converts a source's data can be republished.
 
     Returns:
         What was fetched, skipped and committed, and what failed.
@@ -139,7 +142,10 @@ def sync_season(
     """
     collector = _Collector(run_id, now, on_progress)
     for source in sources:
-        collector.collect(source, season, ledger.ingested_sessions(source.name))
+        done: frozenset[SessionKey] = (
+            frozenset() if force else ledger.ingested_sessions(source.name)
+        )
+        collector.collect(source, season, done)
 
     if not collector.fetched:
         return SyncReport(season, None, collector.fetched, collector.skipped, collector.failures)

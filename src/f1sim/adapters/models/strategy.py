@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
+from f1sim.adapters.models.pit_stops import race_stops
 from f1sim.adapters.models.tyres import TyreModel
 from f1sim.core.domain.rules import SeasonRules
 from f1sim.core.errors import InvariantError
@@ -479,6 +480,8 @@ class StrategyChooser:
 def fit_team_tendencies(pit_stops: pd.DataFrame, laps: pd.DataFrame) -> TeamTendencies:
     """Measure each team's stop count and starting compound (P4-08).
 
+    Only race stops count toward a team's stop tendency.
+
     Args:
         pit_stops: Canonical ``pit_stops`` rows.
         laps: Canonical ``laps`` rows.
@@ -492,7 +495,9 @@ def fit_team_tendencies(pit_stops: pd.DataFrame, laps: pd.DataFrame) -> TeamTend
         if r["team_id"] is not None
     }
     counts: dict[str, list[int]] = {}
-    for (season, round_, driver), group in pit_stops.groupby(["season", "round", "driver_id"]):
+    for (season, round_, driver), group in race_stops(pit_stops).groupby(
+        ["season", "round", "driver_id"]
+    ):
         team = team_of.get((_as_int(season), _as_int(round_), str(driver)))
         if team is not None:
             counts.setdefault(team, []).append(len(group))

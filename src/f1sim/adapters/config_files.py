@@ -12,6 +12,7 @@ from typing import Any, cast
 import yaml
 
 from f1sim.adapters.models.pace_filter import PaceHyper
+from f1sim.adapters.models.tyres import TyreModel
 from f1sim.core.domain.lineage import TeamLineage
 from f1sim.core.domain.reference import CircuitTable, EngineSuppliers
 from f1sim.core.domain.rules import SeasonRules
@@ -111,13 +112,42 @@ def load_season_rules(season: int, directory: Path | None = None) -> SeasonRules
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
         raise DataError(f"Cannot read {path}: {exc}") from exc
-    data: Any = yaml.safe_load(text)
+    try:
+        data: Any = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        raise DataError(f"{path} is not valid YAML: {exc}") from exc
     if not isinstance(data, dict):
         raise ValidationError(f"{path} must contain a mapping")
     rules = SeasonRules.from_mapping(cast(dict[str, Any], data), str(path))
     if rules.season != season:
         raise ValidationError(f"{path} declares season {rules.season}, expected {season}")
     return rules
+
+
+def load_tyre_model(path: Path) -> TyreModel:
+    """Load the fitted tyre and strategy model written by ``f1sim tyres fit``.
+
+    Args:
+        path: JSON file written by ``f1sim tyres fit``.
+
+    Returns:
+        The tyre model.
+
+    Raises:
+        DataError: If the file is missing, cannot be read, is not a mapping, or does not
+            contain a usable model.
+    """
+    if not path.exists():
+        raise DataError(f"no tyre model at {path}; run `f1sim tyres fit` first")
+    try:
+        data: Any = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise DataError(f"Cannot read {path}: {exc}") from exc
+    mapping = _mapping(data, str(path), "model")
+    try:
+        return TyreModel.from_dict(mapping)
+    except (KeyError, TypeError, ValueError, IndexError) as exc:
+        raise DataError(f"{path} is not a usable tyre model: {exc}") from exc
 
 
 def load_pace_hyper(path: Path) -> PaceHyper:
@@ -149,7 +179,10 @@ def _load(resource_name: str, path: Path | None) -> tuple[dict[str, Any], str]:
         text = path.read_text(encoding="utf-8") if path is not None else resource.read_text()
     except OSError as exc:
         raise DataError(f"Cannot read {label}: {exc}") from exc
-    data: Any = yaml.safe_load(text)
+    try:
+        data: Any = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        raise DataError(f"{label} is not valid YAML: {exc}") from exc
     return _mapping(data, label, "top level"), label
 
 
