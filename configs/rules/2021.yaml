@@ -1,0 +1,12 @@
+# 2021 regulations: sprint qualifying weekends introduced. Loaded by f1sim (P4-06).
+season: 2021
+race_distance_km: 305            # minimum race distance
+dry_compounds_per_event: 3
+mandatory_compound_change: true
+overtake_aid: drs
+active_aero: false
+sprint_format: sprint            # sprint sets the grid; conventional qualifying precedes it
+power_unit:
+  mguh: true
+  mguk_kw: 120
+notes: "First sprint weekends (Silverstone, Monza, Interlagos)."

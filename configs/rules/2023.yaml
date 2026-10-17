@@ -1,0 +1,12 @@
+# 2023 regulations: sprint shootout sets the sprint grid. Loaded by f1sim (P4-06).
+season: 2023
+race_distance_km: 305            # minimum race distance
+dry_compounds_per_event: 3
+mandatory_compound_change: true
+overtake_aid: drs
+active_aero: false
+sprint_format: sprint_qualifying
+power_unit:
+  mguh: true
+  mguk_kw: 120
+notes: "Sprint shootout on Saturday morning; race grid from Friday qualifying."
