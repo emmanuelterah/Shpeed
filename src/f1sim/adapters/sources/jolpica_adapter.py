@@ -1,8 +1,8 @@
-"""Jolpica-F1 source adapter (P1-03): schedule, results, qualifying, sprints and pit stops.
+"""Jolpica-F1 source adapter (P1-03): schedule, results, standings, sprints and pit stops.
 
 Jolpica-F1 is the community successor to the Ergast API and serves the same JSON format.
-It owns the ``events``, ``results`` and ``pit_stops`` tables, and its driver and
-constructor IDs are Shpeed's canonical keys (P1-05).
+It owns the ``events``, ``results``, ``pit_stops`` and ``standings`` tables, and its driver
+and constructor IDs are Shpeed's canonical keys (P1-05).
 """
 
 from collections.abc import Callable, Mapping, Sequence
@@ -79,10 +79,14 @@ class JolpicaAdapter:
         found: list[SessionKey] = []
         for race in self._schedule(season):
             event = EventKey(season, int(race["round"]))
+            starts: list[tuple[datetime, SessionKey]] = []
             for session in (SessionType.QUALIFYING, SessionType.SPRINT, SessionType.RACE):
                 start = _session_start(race, session)
-                if start is not None and start + SESSION_DURATION[session.value] <= now:
-                    found.append(SessionKey(event, session))
+                if start is not None:
+                    starts.append((start, SessionKey(event, session)))
+            for start, key in sorted(starts, key=lambda item: item[0]):
+                if start + SESSION_DURATION[key.session.value] <= now:
+                    found.append(key)
         return found
 
     def fetch(self, session: SessionKey) -> Mapping[str, pd.DataFrame]:
@@ -92,7 +96,8 @@ class JolpicaAdapter:
             session: A race, qualifying or sprint session.
 
         Returns:
-            ``results`` for every session; ``pit_stops`` and ``events`` for races too.
+            ``results`` for every session; ``pit_stops``, ``events`` and ``standings`` for
+            races too.
 
         Raises:
             DataError: If the session is not on the schedule or a request fails.
@@ -106,6 +111,7 @@ class JolpicaAdapter:
         if session.session is SessionType.RACE:
             tables["pit_stops"] = self._pit_stops(session, available_at)
             tables["events"] = _event_row(race, session.event.season)
+            tables["standings"] = self._standings(session, available_at)
         return tables
 
     # ------------------------------------------------------------------ helpers
@@ -165,6 +171,44 @@ class JolpicaAdapter:
             for p in self._paged(f"{e.season}/{e.round}/pitstops", "PitStops")
         ]
         return pd.DataFrame(rows)
+
+    def _standings(self, session: SessionKey, available_at: datetime) -> pd.DataFrame:
+        """Fetch the driver and constructor championship standings after a round."""
+        e = session.event
+        rows: list[dict[str, Any]] = []
+        for scope, path, key, subject in (
+            ("driver", "driverStandings", "DriverStandings", "Driver"),
+            ("constructor", "constructorStandings", "ConstructorStandings", "Constructor"),
+        ):
+            data = self._http.get_json(
+                f"{self._base}/{e.season}/{e.round}/{path}.json",
+                {"limit": self._page, "offset": 0},
+            )
+            for entry in _standings_list(data, key):
+                rows.append(
+                    {
+                        "season": e.season,
+                        "round": e.round,
+                        "scope": scope,
+                        "subject_id": entry[subject][_SUBJECT_ID[scope]],
+                        "position": parse_int(entry.get("position")),
+                        "points": parse_float(entry.get("points")),
+                        "wins": parse_int(entry.get("wins")),
+                        "available_at": available_at,
+                    }
+                )
+        return pd.DataFrame(rows)
+
+
+_SUBJECT_ID = {"driver": "driverId", "constructor": "constructorId"}
+
+
+def _standings_list(data: dict[str, Any], key: str) -> list[dict[str, Any]]:
+    lists: list[dict[str, Any]] = data["MRData"]["StandingsTable"].get("StandingsLists", [])
+    if not lists:
+        return []
+    entries: list[dict[str, Any]] = lists[0].get(key, [])
+    return entries
 
 
 def _session_start(race: dict[str, Any], session: SessionType) -> datetime | None:

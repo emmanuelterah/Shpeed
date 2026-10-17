@@ -24,7 +24,7 @@ data/*
 *.duckdb
 *.duckdb.wal
 cache/
-
+.env.example
 # Notebooks
 .ipynb_checkpoints/
 
@@ -39,6 +39,7 @@ frontend/playwright-report/
 .env
 .env.*
 !.env.example
+.env.example.local
 
 # OS / editors
 .DS_Store

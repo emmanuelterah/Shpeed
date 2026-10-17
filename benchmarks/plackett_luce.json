@@ -1,0 +1,25 @@
+{
+  "model": "plackett_luce",
+  "runs": [
+    {
+      "recorded_at": "2026-10-17T10:48:02+00:00",
+      "git_commit": "6fd7aa018bee4c7585382fceaa0c0e1d96db42de-dirty",
+      "snapshot_id": 7,
+      "seasons": [
+        2021,
+        2022
+      ],
+      "seed": 20261012,
+      "skipped": 0,
+      "summary": {
+        "brier_win": 0.039675,
+        "brier_podium": 0.091302,
+        "brier_top10": 0.175856,
+        "log_loss": 2.668337,
+        "rps": 0.136773,
+        "spearman": 0.728097,
+        "races": 44.0
+      }
+    }
+  ]
+}
