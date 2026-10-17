@@ -1,0 +1,12 @@
+# 2025 regulations. Loaded and validated by f1sim (P4-06).
+season: 2025
+race_distance_km: 305            # minimum race distance
+dry_compounds_per_event: 3
+mandatory_compound_change: true
+overtake_aid: drs
+active_aero: false
+sprint_format: sprint_qualifying
+power_unit:
+  mguh: true
+  mguk_kw: 120
+notes: "Last season of the 2014-2025 power units and the DRS overtake aid."

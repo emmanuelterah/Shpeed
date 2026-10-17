@@ -8,5 +8,6 @@
 | [0004](0004-frontend-stack.md) | Frontend stack and design language | Accepted |
 | [0005](0005-backtest-cutoff-and-grid.md) | Backtest cutoff and starting grid | Accepted |
 | [0006](0006-pace-model.md) | Pace model: corrected session pace and a Gaussian state-space model | Accepted |
+| [0007](0007-tyres-and-strategy.md) | Tyres and pit strategy: pooled degradation curves and a softmax chooser | Accepted |
 
 New ADR: copy `0000-template.md`, take the next number, open a PR.

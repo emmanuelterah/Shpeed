@@ -24,6 +24,7 @@ from f1sim.adapters.models.pace_checks import predictive_check
 from f1sim.adapters.models.pace_reference import fit_reference, prepare_laps
 from f1sim.adapters.models.pace_training import SamplerSettings, season_observations, train_pace
 from f1sim.adapters.models.registry import ModelOptions, get_model, model_names, pace_context
+from f1sim.adapters.models.tyres import fit_tyre_model, held_out_stint_rmse
 from f1sim.adapters.sources.fastf1_adapter import FastF1Adapter, fastf1_loaders
 from f1sim.adapters.sources.http import HttpClient
 from f1sim.adapters.sources.jolpica_adapter import JolpicaAdapter
@@ -37,15 +38,18 @@ from f1sim.core.usecases.sync import SyncReport, sync_season
 from f1sim.observability import configure_logging
 from f1sim.reports.backtest_report import leaderboard, render_backtest
 from f1sim.reports.data_quality import render_markdown, session_quality
+from f1sim.reports.pit_windows import calibrate_pit_windows, render_pit_windows
 from f1sim.settings import Settings
 
 app = typer.Typer(help="Shpeed F1 race simulator", no_args_is_help=True)
 data_app = typer.Typer(help="Fetch, validate and manage the local data store", no_args_is_help=True)
 report_app = typer.Typer(help="Backtest and scoring reports", no_args_is_help=True)
 pace_app = typer.Typer(help="Fit, check and update the pace model", no_args_is_help=True)
+tyres_app = typer.Typer(help="Fit and check the tyre and strategy models", no_args_is_help=True)
 app.add_typer(data_app, name="data")
 app.add_typer(report_app, name="report")
 app.add_typer(pace_app, name="pace")
+app.add_typer(tyres_app, name="tyres")
 
 SOURCES = ("jolpica", "fastf1")
 BENCHMARKS_DIR = Path("benchmarks")
@@ -572,6 +576,125 @@ def _print_pace_table(model: PacePredictor, event: EventKey) -> None:
     rows = sorted((model.filter.effect(lab), lab) for lab in labels)
     for (mean, sd), label in rows:
         typer.echo(f"  {label:32} {mean:+.3f} +/- {sd:.3f}")
+
+
+@tyres_app.command("fit", help="Fit degradation, warm-up, pit loss and stop times.")
+def tyres_fit(
+    ctx: typer.Context,
+    *,
+    out: Annotated[Path | None, typer.Option(help="Where to write the result")] = None,
+) -> None:
+    """Fit the tyre model on every stored race (P4-01 to P4-05).
+
+    Args:
+        ctx: Typer context holding settings.
+        out: Output JSON; defaults to the ``tyre_model_path`` setting.
+    """
+    settings: Settings = ctx.obj["settings"]
+    store = open_store(settings)
+    try:
+        snapshot = store.latest_snapshot()
+        laps = store.read("laps", snapshot=snapshot, as_of=FAR_FUTURE)
+        events = store.read("events", snapshot=snapshot, as_of=FAR_FUTURE)
+        pit_stops = store.read("pit_stops", snapshot=snapshot, as_of=FAR_FUTURE)
+    finally:
+        store.close()
+    model = fit_tyre_model(laps, events, pit_stops)
+    target = out or settings.tyre_model_path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(model.to_dict(), indent=2) + "\n", "utf-8")
+    typer.echo(f"Compounds {', '.join(model.degradation.compounds)}")
+    typer.echo(
+        f"Fuel {model.fuel_s_per_lap:.4f} s/lap; pit loss {model.pit_loss_default.value:.2f} s"
+    )
+    typer.echo(f"Wrote {target}")
+
+
+@tyres_app.command("check", help="Held-out stint error, the Phase 4 gate.")
+def tyres_check(  # pylint: disable=too-many-locals
+    ctx: typer.Context,
+    *,
+    seasons: Annotated[str, typer.Option(help="Training seasons, such as 2021-2023")],
+    holdout: Annotated[str, typer.Option(help="Held-out seasons, such as 2024")],
+    max_rmse: Annotated[float, typer.Option(help="Largest acceptable RMSE, seconds")] = 1.5,
+) -> None:
+    """Check that held-out stint lap times match the model (Phase 4 gate).
+
+    Args:
+        ctx: Typer context holding settings.
+        seasons: Seasons the model is fitted on.
+        holdout: Seasons whose stint laps are measured.
+        max_rmse: Largest held-out RMSE in seconds that still passes.
+
+    Raises:
+        typer.Exit: With status 1 when the held-out error is too large.
+    """
+    settings: Settings = ctx.obj["settings"]
+    train_seasons = parse_seasons(seasons)
+    holdout_seasons = parse_seasons(holdout)
+    store = open_store(settings)
+    try:
+        snapshot = store.latest_snapshot()
+        laps = store.read("laps", snapshot=snapshot, as_of=FAR_FUTURE)
+        events = store.read("events", snapshot=snapshot, as_of=FAR_FUTURE)
+        pit_stops = store.read("pit_stops", snapshot=snapshot, as_of=FAR_FUTURE)
+    finally:
+        store.close()
+    train = laps.loc[laps["season"].isin(list(train_seasons))]
+    train_stops = pit_stops.loc[pit_stops["season"].isin(list(train_seasons))]
+    model = fit_tyre_model(train, events, train_stops)
+    rmse = held_out_stint_rmse(
+        laps,
+        events,
+        model.degradation,
+        holdout_seasons,
+        fuel_s_per_lap=model.fuel_s_per_lap,
+    )
+    typer.echo(f"Held-out stint RMSE {rmse:.3f} s (limit {max_rmse:.3f})")
+    typer.echo("PASS" if rmse <= max_rmse else "FAIL")
+    if rmse > max_rmse:
+        raise typer.Exit(1)
+
+
+@tyres_app.command("windows", help="Share of actual stops inside predicted pit windows.")
+def tyres_windows(
+    ctx: typer.Context,
+    *,
+    train: Annotated[str, typer.Option(help="Training seasons, such as 2021-2023")],
+    holdout: Annotated[str, typer.Option(help="Held-out seasons, such as 2024")],
+    out: Annotated[Path | None, typer.Option(help="Write the Markdown here")] = None,
+) -> None:
+    """Report the pit-window calibration on held-out races (P4-10).
+
+    Args:
+        ctx: Typer context holding settings.
+        train: Seasons the tyre model and tendencies are fitted on.
+        holdout: Seasons whose races are measured.
+        out: File for the Markdown report; None prints it.
+
+    Raises:
+        Exit: With status 1 when no held-out race could be measured.
+    """
+    settings: Settings = ctx.obj["settings"]
+    store = open_store(settings)
+    try:
+        result = calibrate_pit_windows(
+            store,
+            store.latest_snapshot(),
+            train_seasons=parse_seasons(train),
+            holdout_seasons=parse_seasons(holdout),
+            rules_dir=settings.rules_dir,
+        )
+    finally:
+        store.close()
+    markdown = render_pit_windows(result)
+    if out is None:
+        typer.echo(markdown)
+    else:
+        out.write_text(markdown, encoding="utf-8")
+        typer.echo(f"Wrote {out}")
+    if result.stops == 0:
+        raise typer.Exit(1)
 
 
 @report_app.command("score", help="Score a published prediction against the official result.")
