@@ -99,6 +99,18 @@ def test_new_sessions_are_picked_up_on_a_later_sync() -> None:
     assert {s.session for _, s in later.fetched} == {SessionType.RACE}
 
 
+def test_forced_sync_refetches_and_replaces_stored_sessions() -> None:
+    store = InMemoryStore()
+    first = sync_season(2024, sources=_sources(), writer=store, ledger=store, run_id="a", now=NOW)
+    again = sync_season(
+        2024, sources=_sources(), writer=store, ledger=store, run_id="b", now=NOW, force=True
+    )
+    assert again.committed
+    assert again.skipped == 0
+    assert {session for _, session in again.fetched} == {s for _, s in first.fetched}
+    assert again.rows == first.rows
+
+
 def test_cli_sync_verify_and_report(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("F1SIM_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("F1SIM_PREDICTIONS_DIR", str(tmp_path / "predictions"))
@@ -112,6 +124,10 @@ def test_cli_sync_verify_and_report(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 
     again = runner.invoke(cli.app, ["data", "sync", "--season", "2024"])
     assert "Nothing new to store" in again.output
+
+    forced = runner.invoke(cli.app, ["data", "sync", "--season", "2024", "--force"])
+    assert forced.exit_code == 0, forced.output
+    assert "Committed snapshot" in forced.output
 
     verified = runner.invoke(cli.app, ["data", "verify"])
     assert verified.exit_code == 0, verified.output

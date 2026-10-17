@@ -181,10 +181,10 @@ class FastF1Adapter:
             raise DataError(f"FastF1 has no laps for {session}")
         start = _naive_utc(s.date)
         available_at = start + SESSION_DURATION[session.session.value]
-        t0 = _session_zero(laps_raw)
+        t0 = _session_zero(laps_raw, start)
         base = {"season": e.season, "round": e.round, "session": session.session.value}
         return {
-            "laps": _laps(laps_raw, s.results, base, available_at, session),
+            "laps": _laps(laps_raw, s.results, base, available_at, session, t0=t0),
             "stints": _stints(laps_raw, s.results, base, available_at),
             "weather": _weather(s.weather_data, t0, base, available_at),
             "track_status": _track_status(s.track_status, t0, base, available_at),
@@ -202,23 +202,46 @@ def _naive_utc(stamp: Any) -> datetime:
     return (ts.tz_convert(UTC) if ts.tzinfo is not None else ts).tz_localize(None).to_pydatetime()
 
 
-def _session_zero(laps: pd.DataFrame) -> pd.Timestamp:
-    """Wall-clock time of FastF1's session time zero, from the lap start stamps.
+def _session_zero(laps: pd.DataFrame, fallback: datetime) -> pd.Timestamp:
+    """Wall-clock time of FastF1's session time zero.
 
-    FastF1 only exposes ``Session.t0_date`` after loading telemetry; deriving it from the
-    laps avoids that heavy download.
+    FastF1 fills ``LapStartDate`` (and ``Session.t0_date``) only when telemetry is loaded,
+    so the zero is derived from the lap start stamps when they are present and otherwise
+    falls back to the session's scheduled start. Both laps and weather use the same zero,
+    so their clocks stay aligned.
+
+    Args:
+        laps: Raw FastF1 laps.
+        fallback: Session start in UTC, used when the laps carry no absolute start date.
+
+    Returns:
+        The session-time-zero timestamp.
     """
-    starts = laps[["LapStartDate", "LapStartTime"]].dropna()
-    if len(starts) == 0:
-        return pd.Timestamp(0)
-    offsets = starts["LapStartDate"] - pd.to_timedelta(starts["LapStartTime"])
-    return pd.Timestamp(offsets.max())
+    if all(name in laps.columns for name in ("LapStartDate", "LapStartTime")):
+        starts = laps[["LapStartDate", "LapStartTime"]].dropna()
+        if len(starts) > 0:
+            offsets = starts["LapStartDate"] - pd.to_timedelta(starts["LapStartTime"])
+            return pd.Timestamp(offsets.max())
+    return pd.Timestamp(fallback)
 
 
 def _utc_times(times: "pd.Series[Any]", t0: pd.Timestamp) -> "pd.Series[Any]":
     """Turn a session-relative ``Time`` column into naive UTC timestamps."""
     shifted = t0 + pd.to_timedelta(times)
     return shifted.dt.tz_localize(None) if t0.tzinfo is not None else shifted
+
+
+def _lap_start_utc(raw: pd.DataFrame, t0: pd.Timestamp) -> "pd.Series[Any]":
+    """Each lap's wall-clock start, from the absolute date or the session-relative time.
+
+    FastF1 omits ``LapStartDate`` unless telemetry is loaded, in which case the lap time is
+    added to the session zero.
+    """
+    if "LapStartDate" in raw.columns and raw["LapStartDate"].notna().any():
+        return pd.to_datetime(raw["LapStartDate"], utc=True).dt.tz_localize(None)
+    if "LapStartTime" in raw.columns:
+        return _utc_times(raw["LapStartTime"], t0)
+    return pd.Series(pd.NaT, index=raw.index, dtype="datetime64[ns]")
 
 
 def _clean_id(value: Any) -> str | None:
@@ -263,6 +286,8 @@ def _laps(
     base: dict[str, Any],
     available_at: datetime,
     session: SessionKey,
+    *,
+    t0: pd.Timestamp,
 ) -> pd.DataFrame:
     raw = raw[raw["LapNumber"].notna() & raw["Driver"].notna()]
     ids, teams = _driver_keys(results)
@@ -295,7 +320,7 @@ def _laps(
             "deleted": raw["Deleted"].astype("boolean").fillna(False)
             if "Deleted" in raw
             else False,
-            "lap_start_utc": pd.to_datetime(raw["LapStartDate"], utc=True).dt.tz_localize(None),
+            "lap_start_utc": _lap_start_utc(raw, t0),
             "available_at": available_at,
         }
     ).reset_index(drop=True)

@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 
 from f1sim.adapters.config_files import load_season_rules
+from f1sim.adapters.models.pit_stops import race_stops
 from f1sim.adapters.models.strategy import (
     DEFAULT_STOP_SPREAD,
     PitWindow,
@@ -134,7 +135,8 @@ def window_hits(
     hits = stops = 0
     for driver, windows in predicted.items():
         laps = actual.get(driver, ())
-        for index, window in enumerate(windows):
+        for window in windows:
+            index = window.stop_index
             if index >= len(laps):
                 continue
             stops += 1
@@ -389,9 +391,10 @@ def _driver_windows(  # pylint: disable=too-many-arguments,too-many-locals
         total_laps=total_laps,
     )
     rows: list[WindowRow] = []
-    for index, window in enumerate(windows):
+    for window in windows:
+        index = window.stop_index
         if index >= len(stops):
-            break
+            continue
         rows.append(
             WindowRow(
                 circuit=circuit,
@@ -408,7 +411,7 @@ def _driver_windows(  # pylint: disable=too-many-arguments,too-many-locals
 
 def _actual_stops(pit_stops: pd.DataFrame) -> dict[tuple[int, int, str], list[int]]:
     stops: dict[tuple[int, int, str], list[int]] = {}
-    for row in _records(pit_stops):
+    for row in _records(race_stops(pit_stops)):
         key = (int(row["season"]), int(row["round"]), str(row["driver_id"]))
         stops.setdefault(key, []).append(int(row["lap"]))
     for value in stops.values():

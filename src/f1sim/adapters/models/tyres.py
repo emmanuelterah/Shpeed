@@ -565,18 +565,20 @@ def held_out_stint_rmse(  # pylint: disable=too-many-locals
     youngest age, so driver and team pace cancel, and a stint whose fastest lap is far from the
     driver's best (a wet or interrupted stint) is dropped. The observed loss at each age is
     corrected for the fuel burnt since that reference, then compared with the model's own loss at
-    that age measured against the same reference, so only the age shape is judged. Errors beyond
-    ``OUTLIER_MADS`` robust deviations are trimmed before the RMSE.
+    that age measured against the same reference, so only the age shape is judged. Each stint's
+    median track temperature is passed to the model, so a fitted temperature term is judged too.
+    Errors beyond ``OUTLIER_MADS`` robust deviations are trimmed before the RMSE.
 
     Args:
-        laps: Canonical ``laps`` rows.
+        laps: Canonical ``laps`` rows. A ``track_temp_c`` column is used when present.
         events: Canonical ``events`` rows.
         model: A fitted degradation model.
         seasons: Seasons to measure.
         fuel_s_per_lap: Fuel effect, seconds per lap, removed from the observed loss.
 
     Returns:
-        The RMSE in seconds; 0 when there is nothing to measure.
+        The RMSE in seconds; ``nan`` when there is no measurable stint (so the gate cannot pass
+        on an empty holdout).
     """
     circuit_of = {
         (int(r["season"]), int(r["round"])): str(r["circuit_id"]) for r in _records(events)
@@ -585,6 +587,7 @@ def held_out_stint_rmse(  # pylint: disable=too-many-locals
     frame = frame.loc[frame["season"].isin(list(seasons)) & frame["stint"].notna()]
     best = frame.groupby(["season", "round", "driver_id"])["lap_time_s"].min()
     buckets: dict[tuple[int, int, str, int, str], dict[int, list[float]]] = {}
+    temps: dict[tuple[int, int, str, int, str], list[float]] = {}
     for row in _records(frame):
         key = (
             int(row["season"]),
@@ -596,8 +599,12 @@ def held_out_stint_rmse(  # pylint: disable=too-many-locals
         buckets.setdefault(key, {}).setdefault(int(row["tyre_life"]), []).append(
             float(row["lap_time_s"])
         )
+        temperature = row.get("track_temp_c")
+        if temperature is not None and not pd.isna(temperature):
+            temps.setdefault(key, []).append(float(temperature))
     errors: list[float] = []
-    for (season, round_, driver, _stint, compound), by_age in buckets.items():
+    for key, by_age in buckets.items():
+        season, round_, driver, _stint, compound = key
         circuit = circuit_of.get((season, round_))
         if circuit is None or compound not in model.compounds or len(by_age) < MIN_CHECK_AGES:
             continue
@@ -605,15 +612,16 @@ def held_out_stint_rmse(  # pylint: disable=too-many-locals
         ref_age = min(medians)
         if medians[ref_age] > float(best.loc[(season, round_, driver)]) + WET_SLACK_S:
             continue
-        ref_model = model.loss(compound, circuit, float(ref_age), None)
+        stint_temperature = float(np.median(temps[key])) if temps.get(key) else None
+        ref_model = model.loss(compound, circuit, float(ref_age), stint_temperature)
         for age, median in medians.items():
             if age < 1 or age > MAX_CHECK_AGE:
                 continue
             observed = median - medians[ref_age] + fuel_s_per_lap * (age - ref_age)
-            predicted = model.loss(compound, circuit, float(age), None) - ref_model
+            predicted = model.loss(compound, circuit, float(age), stint_temperature) - ref_model
             errors.append(predicted - observed)
     if not errors:
-        return 0.0
+        return float("nan")
     return _robust_rmse(np.asarray(errors, dtype=np.float64))
 
 
@@ -655,6 +663,9 @@ def temperature_gain(
 def attach_track_temperature(laps: pd.DataFrame, weather: pd.DataFrame) -> pd.DataFrame:
     """Copy each lap's nearest track temperature onto it (P4-03).
 
+    Laps and weather rows without a timestamp are left unmatched (a NaN temperature), because
+    ``merge_asof`` needs non-null, sorted keys.
+
     Args:
         laps: Canonical ``laps`` rows with ``lap_start_utc``.
         weather: Canonical ``weather`` rows with ``time_utc`` and ``track_temp_c``.
@@ -663,23 +674,27 @@ def attach_track_temperature(laps: pd.DataFrame, weather: pd.DataFrame) -> pd.Da
         The laps with a ``track_temp_c`` column, matched backwards in time within a session.
     """
     left = laps.sort_values("lap_start_utc").reset_index(drop=True)
+    left["track_temp_c"] = np.nan
     columns = ["season", "round", "session", "time_utc", "track_temp_c"]
     right = (
-        weather.loc[weather["track_temp_c"].notna(), columns]
+        weather.loc[weather["track_temp_c"].notna() & weather["time_utc"].notna(), columns]
         .sort_values("time_utc")
         .reset_index(drop=True)
     )
     if right.empty:
-        return left.assign(track_temp_c=np.nan)
+        return left
+    keyed = left.loc[left["lap_start_utc"].notna()].drop(columns=["track_temp_c"]).copy()
+    keyed["_row"] = keyed.index
     merged = pd.merge_asof(
-        left,
+        keyed,
         right,
         left_on="lap_start_utc",
         right_on="time_utc",
         by=["season", "round", "session"],
         direction="backward",
     )
-    return merged
+    left.loc[merged["_row"], "track_temp_c"] = merged["track_temp_c"].to_numpy()
+    return left
 
 
 def _race_degradations(
@@ -745,9 +760,16 @@ class _RaceDesign:
             block = np.where((comp == compound)[:, None], basis, 0.0)
             columns.extend(block[:, k] for k in range(self.n_basis))
         self.temperature_start = len(columns)
-        self.has_temperature = temperature and "track_temp_c" in frame.columns
+        self.has_temperature = (
+            temperature
+            and "track_temp_c" in frame.columns
+            and bool(frame["track_temp_c"].notna().any())
+        )
         if self.has_temperature:
-            centered = frame["track_temp_c"].to_numpy(dtype=np.float64) - TEMPERATURE_REF_C
+            centered = (
+                frame["track_temp_c"].fillna(TEMPERATURE_REF_C).to_numpy(dtype=np.float64)
+                - TEMPERATURE_REF_C
+            )
             for compound in self.compounds:
                 columns.append(np.where(comp == compound, centered * ages, 0.0))
         self.matrix = np.column_stack(columns).astype(np.float64)

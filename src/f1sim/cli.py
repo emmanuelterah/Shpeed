@@ -9,9 +9,11 @@ without that markup appearing in the terminal.
 import json
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from math import isfinite
 from pathlib import Path
 from typing import Annotated, Any, cast
 
+import pandas as pd
 import typer
 
 from f1sim.adapters.benchmarks import check_regression, current_commit, record_run
@@ -24,7 +26,12 @@ from f1sim.adapters.models.pace_checks import predictive_check
 from f1sim.adapters.models.pace_reference import fit_reference, prepare_laps
 from f1sim.adapters.models.pace_training import SamplerSettings, season_observations, train_pace
 from f1sim.adapters.models.registry import ModelOptions, get_model, model_names, pace_context
-from f1sim.adapters.models.tyres import fit_tyre_model, held_out_stint_rmse
+from f1sim.adapters.models.tyres import (
+    attach_track_temperature,
+    fit_tyre_model,
+    held_out_stint_rmse,
+    temperature_gain,
+)
 from f1sim.adapters.sources.fastf1_adapter import FastF1Adapter, fastf1_loaders
 from f1sim.adapters.sources.http import HttpClient
 from f1sim.adapters.sources.jolpica_adapter import JolpicaAdapter
@@ -130,6 +137,9 @@ def data_sync(
     ctx: typer.Context,
     season: Season,
     source: Annotated[str, typer.Option(help="all, jolpica or fastf1")] = "all",
+    force: Annotated[
+        bool, typer.Option("--force", help="Re-fetch and replace sessions already stored.")
+    ] = False,
 ) -> None:
     """Fetch, validate and commit one season as a new snapshot (P1-17).
 
@@ -137,6 +147,8 @@ def data_sync(
         ctx: Typer context holding settings and the run ID.
         season: Season to sync.
         source: ``"all"`` or one source name.
+        force: Re-fetch sessions already stored and replace them, for when the
+            conversion has changed.
 
     Raises:
         BadParameter: If ``source`` is not a known source.
@@ -159,6 +171,7 @@ def data_sync(
             run_id=ctx.obj["run_id"],
             now=_now(),
             on_progress=_print_progress,
+            force=force,
         )
     finally:
         store.close()
@@ -583,12 +596,17 @@ def tyres_fit(
     ctx: typer.Context,
     *,
     out: Annotated[Path | None, typer.Option(help="Where to write the result")] = None,
+    temperature: Annotated[
+        bool, typer.Option("--temperature", help="Add a track-temperature interaction (P4-03).")
+    ] = False,
 ) -> None:
     """Fit the tyre model on every stored race (P4-01 to P4-05).
 
     Args:
         ctx: Typer context holding settings.
         out: Output JSON; defaults to the ``tyre_model_path`` setting.
+        temperature: Whether to add a track-temperature interaction (P4-03). Use
+            ``f1sim tyres check --temperature`` to decide whether it earns its place.
     """
     settings: Settings = ctx.obj["settings"]
     store = open_store(settings)
@@ -597,9 +615,12 @@ def tyres_fit(
         laps = store.read("laps", snapshot=snapshot, as_of=FAR_FUTURE)
         events = store.read("events", snapshot=snapshot, as_of=FAR_FUTURE)
         pit_stops = store.read("pit_stops", snapshot=snapshot, as_of=FAR_FUTURE)
+        if temperature:
+            weather = store.read("weather", snapshot=snapshot, as_of=FAR_FUTURE)
+            laps = attach_track_temperature(laps, weather)
     finally:
         store.close()
-    model = fit_tyre_model(laps, events, pit_stops)
+    model = fit_tyre_model(laps, events, pit_stops, temperature=temperature)
     target = out or settings.tyre_model_path
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(model.to_dict(), indent=2) + "\n", "utf-8")
@@ -617,6 +638,12 @@ def tyres_check(  # pylint: disable=too-many-locals
     seasons: Annotated[str, typer.Option(help="Training seasons, such as 2021-2023")],
     holdout: Annotated[str, typer.Option(help="Held-out seasons, such as 2024")],
     max_rmse: Annotated[float, typer.Option(help="Largest acceptable RMSE, seconds")] = 1.5,
+    temperature: Annotated[
+        bool,
+        typer.Option(
+            "--temperature", help="Test a track-temperature interaction and keep it if it helps."
+        ),
+    ] = False,
 ) -> None:
     """Check that held-out stint lap times match the model (Phase 4 gate).
 
@@ -625,9 +652,11 @@ def tyres_check(  # pylint: disable=too-many-locals
         seasons: Seasons the model is fitted on.
         holdout: Seasons whose stint laps are measured.
         max_rmse: Largest held-out RMSE in seconds that still passes.
+        temperature: Whether to test a track-temperature interaction (P4-03), keeping it only
+            when it improves the held-out RMSE.
 
     Raises:
-        typer.Exit: With status 1 when the held-out error is too large.
+        typer.Exit: With status 1 when the held-out error is too large or nothing was measured.
     """
     settings: Settings = ctx.obj["settings"]
     train_seasons = parse_seasons(seasons)
@@ -638,11 +667,17 @@ def tyres_check(  # pylint: disable=too-many-locals
         laps = store.read("laps", snapshot=snapshot, as_of=FAR_FUTURE)
         events = store.read("events", snapshot=snapshot, as_of=FAR_FUTURE)
         pit_stops = store.read("pit_stops", snapshot=snapshot, as_of=FAR_FUTURE)
+        if temperature:
+            weather = store.read("weather", snapshot=snapshot, as_of=FAR_FUTURE)
+            laps = attach_track_temperature(laps, weather)
     finally:
         store.close()
     train = laps.loc[laps["season"].isin(list(train_seasons))]
     train_stops = pit_stops.loc[pit_stops["season"].isin(list(train_seasons))]
-    model = fit_tyre_model(train, events, train_stops)
+    use_temperature = temperature and _temperature_earns_its_place(
+        laps, events, train_seasons, holdout_seasons
+    )
+    model = fit_tyre_model(train, events, train_stops, temperature=use_temperature)
     rmse = held_out_stint_rmse(
         laps,
         events,
@@ -650,10 +685,33 @@ def tyres_check(  # pylint: disable=too-many-locals
         holdout_seasons,
         fuel_s_per_lap=model.fuel_s_per_lap,
     )
+    if not isfinite(rmse):
+        held = ", ".join(str(s) for s in holdout_seasons)
+        typer.echo(f"No held-out stint laps to measure for {held}")
+        raise typer.Exit(1)
     typer.echo(f"Held-out stint RMSE {rmse:.3f} s (limit {max_rmse:.3f})")
     typer.echo("PASS" if rmse <= max_rmse else "FAIL")
     if rmse > max_rmse:
         raise typer.Exit(1)
+
+
+def _temperature_earns_its_place(
+    laps: pd.DataFrame,
+    events: pd.DataFrame,
+    train_seasons: Sequence[int],
+    holdout_seasons: Sequence[int],
+) -> bool:
+    check = temperature_gain(
+        laps,
+        events,
+        train_seasons=train_seasons,
+        holdout_seasons=holdout_seasons,
+    )
+    verdict = "kept" if check.warranted else "dropped"
+    typer.echo(
+        f"Temperature: held-out RMSE {check.rmse_without:.3f} -> {check.rmse_with:.3f} ({verdict})"
+    )
+    return check.warranted
 
 
 @tyres_app.command("windows", help="Share of actual stops inside predicted pit windows.")
