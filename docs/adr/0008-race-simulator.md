@@ -27,6 +27,14 @@ Phase 5 turns the pace, tyre and strategy models into a forecast by running each
 
 **Run count.** The simulator takes its runs per race from `Settings.n_sims` (`F1SIM_N_SIMS`, 10,000 by default) through `ModelOptions`; the baselines keep their own count.
 
+**Track position calibration.** Measured against real 2021 races (places gained per lap on which no car stopped, and the grid-to-finish rank correlation), the first engine passed 1.8 times too often and kept less of the grid than real races. Three simulator settings in `SimulatorContext`, each chosen on 2021 only, fix this:
+
+- `pass_offset` = −1.4 log-odds on every pass attempt. The pass model is fitted on pairs within 1 s at the line, while the engine attempts a pass whenever a car would end the lap within 0.3 s of the one ahead, which happens more often. With it, simulated passing is 0.56 places per clean lap, as in 2021.
+- `chooser_temperature_s` = 2 s for the race-day strategy draw (the pit-window report keeps 8 s). The engine charges a sampled plan's full time penalty, but a team that runs a different plan does so because it is about as fast for them; at 8 s the strategy draw alone added seconds of random spread and scrambled the grid.
+- `race_noise_pct` = 0.3% of lap time per car, instead of the pace model's `order_noise` (0.45%). That value stands in for everything that reorders a race when cars are only ranked by pace; the simulator models strategy, stops and passes itself, so reusing it counted that randomness twice.
+
+Together they match the 2021 grid-to-finish correlation (0.757 against 0.754 real) and improve RPS on 2021 from 0.1234 to 0.1208 and, out of sample, on 2022 from 0.1326 to 0.1307 (2,000 runs per race). Judging passes on noise-free pace instead of each lap's time made no difference and was not adopted.
+
 **Reproducibility (P5-09).** One seeded generator drives every draw in a fixed order, so the same seed, snapshot and model version give a bit-identical matrix.
 
 **Aggregation (P5-12).** Finishing orders across runs become a `PositionMatrix` with P(DNF), mixed with 0.1% of the uniform forecast like the baselines, so log loss stays finite.
@@ -50,5 +58,7 @@ Phase 5 turns the pace, tyre and strategy models into a forecast by running each
 - Lapping is not modelled: cars are compared at equal lap counts, so a leader never interacts with a backmarker. Traffic is a Phase 6 candidate (P6-08).
 - The simulator reads `configs/rules/<season>.yaml`, which lives in the repository rather than the wheel; outside a checkout, `F1SIM_RULES_DIR` must point at a rules folder.
 - As first built, the simulator scored RPS 0.154 against Plackett–Luce's 0.137 on 2021–2022. The gap was in its race-pace input, not the engine: a wrong backtest cutoff, discarded sessions, outlying qualifying laps and unfitted pace hyperparameters (ADR-0005 amendment, ADR-0006). With those fixed it scores 0.128, the best recorded model (`grid_noise` 0.130, Plackett–Luce 0.137), and on 2022, which the hyperparameters did not see, 0.133 against 0.143, beating Plackett–Luce in 19 of 22 races. The roadmap gate asks for 2022–2025, which needs 2023–2025 laps in the store.
-- With every car given equal pace the simulator scores far worse than `grid_noise`, so track position is weak in the engine: the 0.3 s per slot start offset is washed out over a race. Tying the grid more closely to the overtaking model is a candidate improvement.
+- Real cars passed more in 2022 (0.84 places per clean lap, after the ground-effect rules) than in 2021 (0.56), so a single `pass_offset` under-passes in 2022; a per-era calibration is a candidate once 2023–2025 laps are in the store.
+- Lap 1 barely reorders the field (simulated grid-to-lap-1 rank correlation 0.997 against 0.88 real); launches and first-corner incidents belong to the lap 1 model (P6-05).
+- The three calibrated settings are constants chosen by hand-run experiments, not fitted by a command; recalibrating them as data grows means rerunning those comparisons.
 - Every new mechanic is a new step; the engine and aggregation stay unchanged.

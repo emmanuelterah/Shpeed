@@ -41,6 +41,7 @@ class OvertakeStep:
         circuit: str | None = None,
         min_gap_s: float = MIN_GAP_S,
         pass_margin_s: float = PASS_MARGIN_S,
+        pass_offset: float = 0.0,
     ) -> None:
         """Create the step.
 
@@ -49,6 +50,7 @@ class OvertakeStep:
             circuit: Circuit ID, for the model's difficulty offset.
             min_gap_s: Following gap after a failed pass, seconds.
             pass_margin_s: Largest lead a passing car is placed with, seconds.
+            pass_offset: Log-odds added to every pass, calibrating the engine's pass rate.
 
         Raises:
             InvariantError: If the gaps are not positive.
@@ -59,6 +61,7 @@ class OvertakeStep:
         self.circuit = circuit
         self.min_gap_s = min_gap_s
         self.pass_margin_s = pass_margin_s
+        self.pass_offset = pass_offset
 
     def apply(self, state: RaceState, ctx: LapContext, rng: np.random.Generator) -> None:
         """Resolve every pass attempt of the lap.
@@ -119,7 +122,9 @@ class OvertakeStep:
         ctx: LapContext,
     ) -> NDArray[np.float64]:
         advantage = state.lap_time_s[sims, defender] - state.lap_time_s[sims, attacker]
-        return self.model.pass_probability(advantage, circuit=self.circuit, aid=ctx.overtake_aid)
+        return self.model.pass_probability(
+            advantage, circuit=self.circuit, aid=ctx.overtake_aid, offset=self.pass_offset
+        )
 
     def _squeeze(
         self, t_att: NDArray[np.float64], floor: NDArray[np.float64], ceiling: NDArray[np.float64]

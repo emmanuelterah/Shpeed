@@ -1,9 +1,11 @@
 """The Monte Carlo simulator end to end: reproducibility (P5-09) and its use of the grid (P5-08)."""
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
-from f1sim.adapters.models.registry import ModelOptions, get_model
+from f1sim.adapters.models.registry import ModelOptions, get_model, simulator_context
 from f1sim.adapters.models.simulator import SimulatorPredictor
 from f1sim.adapters.models.tyre_priors import default_tyre_model
 from f1sim.adapters.store.memory_store import InMemoryStore
@@ -65,6 +67,20 @@ def test_track_position_matters_for_equal_cars() -> None:
     race = build_race(n_sims=2000, n_cars=6, laps=10, seed=5, p_dnf=0.0, pace_spread_s=0.0)
     matrix = simulate_race(race.drivers, race.state, race.steps, race.ctx, np.random.default_rng(5))
     assert matrix.p_win()[0] > matrix.p_win()[-1]
+
+
+def test_race_day_noise_comes_from_the_simulator_context(store: InMemoryStore) -> None:
+    entries = _entries(store)
+    calm = _fitted_with(store, race_noise_pct=0.0).predict(EVENT, entries)
+    wild = _fitted_with(store, race_noise_pct=3.0).predict(EVENT, entries)
+    assert calm.p_win().max() > wild.p_win().max()
+
+
+def _fitted_with(store: InMemoryStore, **settings: float) -> SimulatorPredictor:
+    context = replace(simulator_context(ModelOptions(pace_hyper=FITTED)), **settings)
+    model = SimulatorPredictor(5, context)
+    model.fit(store, snapshot=store.latest_snapshot(), cutoff=FAR_FUTURE)
+    return model
 
 
 def test_predict_before_fit_is_an_error() -> None:

@@ -201,6 +201,14 @@ def test_overtake_step_holds_the_follower_when_the_pass_fails() -> None:
     assert state.lap_time_s[0, 1] == pytest.approx(89.8)
 
 
+def test_overtake_step_pass_offset_can_rule_out_a_pass() -> None:
+    state = _mid_lap([0.0, 0.5], [90.0, 89.0])
+    OvertakeStep(_overtaking(20.0), pass_offset=-40.0).apply(
+        state, NO_AID, np.random.default_rng(1)
+    )
+    assert state.position.tolist() == [[1, 2]]
+
+
 def test_overtake_step_leaves_a_car_out_of_range_alone() -> None:
     state = _mid_lap([0.0, 0.5], [90.0, 91.0])
     OvertakeStep(_overtaking(20.0)).apply(state, NO_AID, np.random.default_rng(1))
