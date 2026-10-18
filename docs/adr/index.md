@@ -11,5 +11,6 @@
 | [0007](0007-tyres-and-strategy.md) | Tyres and pit strategy: pooled degradation curves and a softmax chooser | Accepted |
 | [0008](0008-race-simulator.md) | Race simulator: cumulative-time state and an ordered LapStep pipeline | Accepted |
 | [0009](0009-race-events.md) | Race events: fitted hazards, a neutralisation level and an ablation gate | Accepted |
+| [0010](0010-regulation-reset-study.md) | Regulation-reset study: experiments as data, resets as a config strategy | Accepted |
 
 New ADR: copy `0000-template.md`, take the next number, open a PR.

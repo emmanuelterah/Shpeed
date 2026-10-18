@@ -25,6 +25,7 @@ class Settings(BaseSettings):
             the built-in defaults are used while the file does not exist.
         tyre_model_path: Fitted tyre and strategy model written by ``f1sim tyres fit``.
         rules_dir: Folder holding ``<season>.yaml`` season-rules files (P4-06).
+        experiments_path: Natural-experiment manifest for the regulation-reset study (P7-01).
     """
 
     model_config = SettingsConfigDict(env_prefix="F1SIM_", env_file=".env", extra="ignore")
@@ -40,6 +41,7 @@ class Settings(BaseSettings):
     pace_hyper_path: Path = Path("configs/pace_hyper.json")
     tyre_model_path: Path = Path("configs/tyre_model.json")
     rules_dir: Path = Path("configs/rules")
+    experiments_path: Path = Path("configs/natural-experiments.yaml")
 
     @property
     def state_dir(self) -> Path:
