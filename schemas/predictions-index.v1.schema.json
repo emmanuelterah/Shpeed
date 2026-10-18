@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://shpeed.dev/schemas/predictions-index.v1.schema.json",
+  "title": "PredictionsIndex",
+  "description": "predictions/index.json: published races, scoreboard and calibration (P8-10)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "latest", "races", "calibration"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "latest": { "type": ["string", "null"], "description": "Path of the newest record, relative to predictions/" },
+    "races": {
+      "type": "array",
+      "description": "Oldest first",
+      "items": { "$ref": "#/$defs/RaceSummary" }
+    },
+    "calibration": { "$ref": "#/$defs/Calibration" }
+  },
+  "$defs": {
+    "RaceSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["season", "round", "path", "data_cutoff", "model_version", "n_drivers", "score"],
+      "properties": {
+        "season": { "type": "integer", "minimum": 1950 },
+        "round": { "type": "integer", "minimum": 1 },
+        "path": { "type": "string", "description": "Record path relative to predictions/, such as 2024/03.json" },
+        "event_name": { "type": "string" },
+        "data_cutoff": { "type": "string", "format": "date-time" },
+        "model_version": { "type": "string" },
+        "n_drivers": { "type": "integer", "minimum": 1 },
+        "score": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/RaceScore" }]
+        }
+      }
+    },
+    "RaceScore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["brier_win", "brier_podium", "brier_top10", "log_loss", "rps", "scored_at"],
+      "properties": {
+        "brier_win": { "type": "number", "minimum": 0 },
+        "brier_podium": { "type": "number", "minimum": 0 },
+        "brier_top10": { "type": "number", "minimum": 0 },
+        "log_loss": { "type": "number", "minimum": 0 },
+        "rps": { "type": "number", "minimum": 0, "description": "Ranked probability score; lower is better" },
+        "scored_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Calibration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["races_scored", "forecasts", "events"],
+      "properties": {
+        "races_scored": { "type": "integer", "minimum": 0 },
+        "forecasts": { "type": "integer", "minimum": 0, "description": "Driver forecasts behind each event's bins" },
+        "events": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CalibrationEvent" }
+        }
+      }
+    },
+    "CalibrationEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event", "label", "bins"],
+      "properties": {
+        "event": { "enum": ["win", "podium", "top10"] },
+        "label": { "type": "string" },
+        "bins": {
+          "type": "array",
+          "description": "Non-empty probability bins, lowest first",
+          "items": { "$ref": "#/$defs/CalibrationBin" }
+        }
+      }
+    },
+    "CalibrationBin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["low", "high", "mean_forecast", "observed", "count"],
+      "properties": {
+        "low": { "type": "number", "minimum": 0, "maximum": 1 },
+        "high": { "type": "number", "minimum": 0, "maximum": 1 },
+        "mean_forecast": { "type": "number", "minimum": 0, "maximum": 1 },
+        "observed": { "type": "number", "minimum": 0, "maximum": 1 },
+        "count": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

@@ -1,0 +1,61 @@
+.controls {
+  max-width: var(--content-max);
+  margin: 0 auto var(--space-4);
+  padding: 0 var(--space-4);
+}
+.chartCell {
+  padding: var(--space-4);
+}
+.tableSection {
+  max-width: var(--content-max);
+  margin: 0 auto var(--space-8);
+  padding: 0 var(--space-4);
+}
+.tableHeader {
+  font: var(--text-footnote);
+  text-transform: uppercase;
+  color: var(--secondary-label);
+  padding: 0 var(--space-4) var(--space-2);
+}
+.tableCell {
+  background: var(--grouped-cell);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font: var(--text-subhead);
+  font-variant-numeric: tabular-nums;
+}
+.table th,
+.table td {
+  padding: var(--space-3) var(--space-4);
+  text-align: right;
+  white-space: nowrap;
+}
+.table th:first-child {
+  text-align: left;
+}
+.table thead th {
+  font: var(--text-footnote);
+  font-weight: 600;
+  color: var(--secondary-label);
+}
+.table tbody th {
+  font-weight: 400;
+}
+.table tr + tr > * {
+  border-top: 0.5px solid var(--separator);
+}
+.table tbody tr:first-child > * {
+  border-top: 0.5px solid var(--separator);
+}
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

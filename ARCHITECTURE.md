@@ -83,11 +83,13 @@ Shpeed/
   src/f1sim/
     core/              # no I/O libraries (enforced by import-linter)
       domain/          # SessionKey, EventKey, RaceState, PositionMatrix
+      domain/record.py # PredictionRecord: forecast + provenance + score (P8-02)
       ports/           # SourceAdapter, DataWriter, DataReader, Predictor, FittedStateStore,
-                       # LapStep, Publisher
+                       # LapStep, Publisher, RecordReader, RecordValidator
       engine/          # Monte Carlo loop over LapSteps
       scoring/         # Brier, RPS, calibration
-      usecases/        # sync, backtest, simulate, score, publish
+      usecases/        # sync, planning, backtest, predict, simulate, score, publish
+                       # (lights-out lock, ADR-0011), scoreboard (index + calibration)
       errors.py
     resources/         # data shipped in the wheel: team lineage, circuits, engine suppliers
     adapters/
@@ -99,19 +101,22 @@ Shpeed/
       benchmarks.py    # benchmarks/<model>.json records and the regression gate
       steps/           # lap_time, dirty_air, pit_stop, overtake; later safety_car,
                        # reliability, lap1 (ADR-0008)
-      publishers/      # git_pages, local_file (tests)
+      publishers/      # git_pages (one commit per publish), local_file, index (atomic writes)
+      records.py       # JSON Schema validation of published files
     api/               # read-only FastAPI service and its container health check
     reports/           # backtest reports
     settings.py        # the only module that reads environment variables
     observability.py   # structlog with run_id
     cli.py             # composition root
+    live.py            # wiring for predict and report score; cli_args.py parses options
   frontend/            # React + TypeScript + Vite web app (section 6)
-  schemas/             # prediction-record.v1.schema.json, shared by backend and frontend
+  schemas/             # prediction-record.v1 and predictions-index.v1, shared by backend
+                       # and frontend
   configs/             # rules/<season>.yaml, circuits, mapping notes
   typings/             # type stubs for untyped libraries (fastf1), used by pyright and Pylance
   tests/               # unit, property, contract, integration, perf, fixtures/recorded
   benchmarks/          # recorded backtest scores per model
-  predictions/         # published prediction records
+  predictions/         # published prediction records and index.json
   docker/              # api.Dockerfile, web.Dockerfile, nginx.conf
   compose.yaml         # local stack; compose.dev.yaml adds hot reload
   notebooks/  scripts/  docs/{adr,architecture,planning,guides}/
@@ -318,10 +323,11 @@ The data pipeline (`f1sim data sync`, `predict`) is not a service: it runs as a 
 | D8 | Core owns the interfaces | Heavy libraries live behind small ports; swapping one touches one adapter |
 | D9 · ADR-0004 | React + TypeScript + Vite frontend on Apple HIG | Static app on Pages; types generated from the shared schema |
 | D10 · ADR-0008 | Cumulative-time race state, passes resolved in start-of-lap order | Track position matters after lap 1; each mechanic is its own LapStep |
+| D11 · ADR-0011 | Forecasts lock at lights out | A forecast can follow late grid news until the race starts, re-runs are no-ops, and the scoreboard never sees hindsight |
 
 ---
 
-## 10. Prediction record (proposed schema v1)
+## 10. Prediction record (schema v1)
 
 ```jsonc
 // predictions/2027/01.json
@@ -339,9 +345,18 @@ The data pipeline (`f1sim data sync`, `predict`) is not a service: it runs as a 
   "drivers": [
     { "driver_id": "...", "p_position": [0.31, 0.22, 0.14], "p_dnf": 0.06 }  // p_position has 22 values summing to 1
   ],
-  "score": null  // filled by the scoring run
+  "score": null  // filled by the scoring run: brier_win, brier_podium, brier_top10,
+                 // log_loss, rps, scored_at and positions (official finish per driver)
 }
 ```
+
+Probabilities are stored to eight decimals. Records are published under the lights-out lock
+(ADR-0011): replaced before the race if new data changes the forecast, untouched by a re-run
+that gives the same probabilities, and frozen after lights out except for the score.
+`predictions/index.json` (`schemas/predictions-index.v1.schema.json`) is rebuilt from the
+records on every publish: every race with its score, plus calibration bins for win, podium
+and points pooled over every scored race. The static site reads it for the Season and
+Calibration screens; the API serves it at `/predictions/index`.
 
 ---
 

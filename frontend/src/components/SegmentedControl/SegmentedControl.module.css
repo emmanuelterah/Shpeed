@@ -13,6 +13,7 @@
   border: 0;
   border-radius: 7px;
   background: transparent;
+  color: var(--label);
   font: var(--text-footnote);
   font-weight: 500;
   cursor: pointer;

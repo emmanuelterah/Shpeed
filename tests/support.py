@@ -2,11 +2,13 @@
 
 from collections.abc import Sequence
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
+from f1sim.adapters.store.ducklake_store import DuckLakeStore
 from f1sim.core.domain import PositionMatrix
 from f1sim.core.domain.entities import EventKey, SnapshotId
 from f1sim.core.domain.race import RaceEntry
@@ -204,6 +206,24 @@ def classification(grid: int, position: int | None) -> dict[str, Any]:
         "q2_s": None,
         "q3_s": None,
     }
+
+
+def seed_store(
+    base: Path, results: pd.DataFrame, *, run_id: str = "seed", **tables: pd.DataFrame
+) -> None:
+    """Commit canonical frames into a fresh DuckLake store at ``base/lake``.
+
+    Args:
+        base: Data-folder root; the store lives under ``base/lake``.
+        results: The ``results`` frame to commit.
+        run_id: Ledger run id for the commit.
+        **tables: Further canonical tables to commit in the same snapshot.
+    """
+    store = DuckLakeStore(base / "lake")
+    try:
+        store.commit({"results": results, **tables}, run_id=run_id)
+    finally:
+        store.close()
 
 
 class UniformModel:

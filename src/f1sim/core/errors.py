@@ -24,6 +24,10 @@ class LeakageError(ShpeedError):
     """A read went past the prediction cutoff. This is always a bug."""
 
 
+class RecordLockedError(ShpeedError):
+    """A forecast was published or changed after lights out, when records are frozen (P8-03)."""
+
+
 class InvariantError(ShpeedError):
     """A domain invariant was violated, for example probabilities that do not sum to 1."""
 
