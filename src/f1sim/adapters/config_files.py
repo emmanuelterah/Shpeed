@@ -14,6 +14,7 @@ import yaml
 from f1sim.adapters.models.pace_filter import PaceHyper
 from f1sim.adapters.models.tyres import TyreModel
 from f1sim.core.domain.lineage import TeamLineage
+from f1sim.core.domain.natural_experiment import LEVELS, NaturalExperiment
 from f1sim.core.domain.reference import CircuitTable, EngineSuppliers
 from f1sim.core.domain.rules import SeasonRules
 from f1sim.core.errors import DataError, ValidationError
@@ -122,6 +123,61 @@ def load_season_rules(season: int, directory: Path | None = None) -> SeasonRules
     if rules.season != season:
         raise ValidationError(f"{path} declares season {rules.season}, expected {season}")
     return rules
+
+
+def load_natural_experiments(path: Path | None = None) -> tuple[NaturalExperiment, ...]:
+    """Load the natural-experiment manifest for the regulation-reset study (P7-01).
+
+    Args:
+        path: YAML file to read; defaults to ``configs/natural-experiments.yaml``.
+
+    Returns:
+        One entry per natural experiment, in file order.
+
+    Raises:
+        DataError: If the file is missing, cannot be read, is not a mapping, lists no
+            experiments, or an experiment is missing a field or names a bad level.
+    """
+    file = path if path is not None else Path("configs/natural-experiments.yaml")
+    if not file.exists():
+        raise DataError(f"no natural-experiment manifest at {file}")
+    try:
+        text = file.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise DataError(f"Cannot read {file}: {exc}") from exc
+    try:
+        data: Any = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        raise DataError(f"{file} is not valid YAML: {exc}") from exc
+    top = _mapping(data, str(file), "top level")
+    entries = top.get("experiments")
+    if not isinstance(entries, list) or not entries:
+        raise DataError(f"{file} must list at least one experiment")
+    typed = cast(list[Any], entries)
+    return tuple(_experiment(entry, str(file)) for entry in typed)
+
+
+def _experiment(entry: Any, label: str) -> NaturalExperiment:
+    row = _mapping(entry, label, "experiment")
+    try:
+        seasons = tuple(int(s) for s in cast(list[Any], row["seasons"]))
+        experiment = NaturalExperiment(
+            experiment_id=str(row["id"]),
+            name=str(row["name"]),
+            level=str(row["level"]),
+            seasons=seasons,
+            reset_season=int(row["reset_season"]),
+            reset_round=int(row.get("reset_round", 1)),
+            snapshot=int(row["snapshot"]) if row.get("snapshot") is not None else None,
+            notes=str(row.get("notes", "")),
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise DataError(f"{label}: bad experiment entry: {exc}") from exc
+    if experiment.level not in LEVELS:
+        raise DataError(f"{label}: {experiment.experiment_id} level must be one of {LEVELS}")
+    if experiment.reset_season not in experiment.seasons:
+        raise DataError(f"{label}: {experiment.experiment_id} reset season not in its seasons")
+    return experiment
 
 
 def load_tyre_model(path: Path) -> TyreModel:

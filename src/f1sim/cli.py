@@ -19,6 +19,7 @@ import typer
 
 from f1sim.adapters.benchmarks import check_regression, current_commit, record_run
 from f1sim.adapters.config_files import (
+    load_natural_experiments,
     load_pace_hyper,
     load_team_lineage,
 )
@@ -27,6 +28,13 @@ from f1sim.adapters.models.pace_checks import predictive_check
 from f1sim.adapters.models.pace_reference import fit_reference, prepare_laps
 from f1sim.adapters.models.pace_training import SamplerSettings, season_observations, train_pace
 from f1sim.adapters.models.registry import ModelOptions, get_model, model_names, pace_context
+from f1sim.adapters.models.resets import (
+    DEFAULT_HALF_LIFE,
+    DEFAULT_PRACTICE_WEIGHT,
+    DEFAULT_RESET_SD,
+    STRATEGIES,
+    ResetConfig,
+)
 from f1sim.adapters.models.simulator import COMPONENTS
 from f1sim.adapters.models.tyres import (
     attach_track_temperature,
@@ -49,6 +57,7 @@ from f1sim.reports.ablation import render_ablation, run_ablation
 from f1sim.reports.backtest_report import leaderboard, render_backtest
 from f1sim.reports.data_quality import render_markdown, session_quality
 from f1sim.reports.pit_windows import calibrate_pit_windows, render_pit_windows
+from f1sim.reports.recovery import render_recovery, run_recovery
 from f1sim.settings import Settings
 
 app = typer.Typer(help="Shpeed F1 race simulator", no_args_is_help=True)
@@ -853,3 +862,80 @@ def report_ablation(
     if check and harmful:
         typer.secho(f"Harmful components (drop these): {', '.join(harmful)}", fg=typer.colors.RED)
         raise typer.Exit(1)
+
+
+@report_app.command("recovery", help="Compare prior-handling strategies across a regulation reset.")
+def report_recovery(  # pylint: disable=too-many-arguments,too-many-locals
+    ctx: typer.Context,
+    *,
+    experiment: Annotated[
+        str, typer.Option(help="Natural-experiment id from the manifest")
+    ] = "reg-2022",
+    strategies: Annotated[str, typer.Option(help="Comma-separated strategies to compare")] = (
+        ",".join(STRATEGIES)
+    ),
+    out: Annotated[Path, typer.Option(help="Where to write the Markdown report")] = Path(
+        "docs/research/regulation-reset.md"
+    ),
+    half_life: Annotated[
+        float, typer.Option("--half-life", help="Decay half-life in races (P7-02)")
+    ] = DEFAULT_HALF_LIFE,
+    sd: Annotated[float, typer.Option(help="Reset prior spread, percent (P7-02)")] = (
+        DEFAULT_RESET_SD
+    ),
+    practice_weight: Annotated[
+        float,
+        typer.Option("--practice-weight", help="Weight of the reset season's opening practice"),
+    ] = DEFAULT_PRACTICE_WEIGHT,
+    workers: Annotated[int, typer.Option(help="Races forecast in parallel")] = 4,
+) -> None:
+    """Run the regulation-reset study and write recovery curves (P7-03).
+
+    Args:
+        ctx: Typer context holding settings.
+        experiment: Natural-experiment id from ``configs/natural-experiments.yaml``.
+        strategies: Strategies to compare, comma-separated.
+        out: File for the Markdown report.
+        half_life: Half-life, in races, for the exponential-decay strategy.
+        sd: Prior spread, in percent, for the reset strategies.
+        practice_weight: Extra weight on the reset season's opening practice.
+        workers: Races forecast in parallel.
+
+    Raises:
+        typer.Exit: With status 1 when the experiment is unknown or its data is not synced.
+    """
+    settings: Settings = ctx.obj["settings"]
+    experiments = load_natural_experiments(settings.experiments_path)
+    chosen = next((e for e in experiments if e.experiment_id == experiment), None)
+    if chosen is None:
+        known = ", ".join(e.experiment_id for e in experiments)
+        typer.secho(f"Unknown experiment {experiment!r}; choose from {known}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    if chosen.snapshot is None:
+        typer.secho(f"{experiment} is not synced: {chosen.notes}", fg=typer.colors.YELLOW)
+        raise typer.Exit(1)
+    names = tuple(n.strip() for n in strategies.split(",") if n.strip())
+    config = ResetConfig(
+        reset_season=chosen.reset_season,
+        half_life=half_life,
+        sd=sd,
+        practice_weight=practice_weight,
+    )
+    store = open_store(settings)
+    try:
+        study = run_recovery(
+            store,
+            snapshot=SnapshotId(chosen.snapshot),
+            experiment=chosen,
+            strategies=names,
+            seed=settings.seed,
+            options=replace(_model_options(settings), reset=config),
+            workers=workers,
+        )
+    finally:
+        store.close()
+    markdown = render_recovery(study)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(markdown, encoding="utf-8")
+    typer.echo(markdown)
+    typer.echo(f"Wrote {out}")

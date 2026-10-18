@@ -201,15 +201,19 @@ published. The safety car sits on the band edge (−0.0010 RPS), recorded as a m
 
 **Goal:** Measure how fast the model recovers after a regulation reset, and which approach recovers fastest.
 
-**Gate:** The notebook reruns end to end from a clean environment and the findings are written up.
+**Gate:** The notebook executes in CI from a clean environment against a pinned fixture
+(P7-04), and the findings are written up. On the 2022 reset every strategy is back to the
+pre-reset level by race 7, full history is as fast as any and stays the default (ADR-0010);
+the study is `docs/research/regulation-reset-writeup.md`, the numbers
+`docs/research/regulation-reset.md`. 2014 and 2026 are declared but not synced.
 
 | | ID | Feature | Area | Priority | Done when | Depends on | Principles |
 |---|---|---|---|---|---|---|---|
-| ⬜ | `P7-01` | Natural-experiment datasets | Research | must | 2022 and 2026 at lap level, 2014 at results level, each as a pinned snapshot. | P1-13 |  |
-| ⬜ | `P7-02` | Reset strategies compared | Research | must | Full history, exponential decay, reset priors, testing-informed priors as config options. | P3-04 |  |
-| ⬜ | `P7-03` | Recovery curves | Research | must | Score by race number after reset for each strategy. | P7-02 |  |
-| ⬜ | `P7-04` | Reproducible notebook | Research | must | Executes in CI from a clean env against pinned snapshots. | P7-03 |  |
-| ⬜ | `P7-05` | Blog write-up | Research | must | Findings published as a post. | P7-04 |  |
+| 🔍 | `P7-01` | Natural-experiment datasets | Research | must | 2022 and 2026 at lap level, 2014 at results level, each as a pinned snapshot. | P1-13 |  |
+| 🔍 | `P7-02` | Reset strategies compared | Research | must | Full history, exponential decay, reset priors, testing-informed priors as config options. | P3-04 |  |
+| 🔍 | `P7-03` | Recovery curves | Research | must | Score by race number after reset for each strategy. | P7-02 |  |
+| 🔍 | `P7-04` | Reproducible notebook | Research | must | Executes in CI from a clean env against pinned snapshots. | P7-03 |  |
+| 🔍 | `P7-05` | Blog write-up | Research | must | Findings published as a post. | P7-04 |  |
 
 ## Phase 8 — Delivery
 

@@ -14,6 +14,7 @@ from f1sim.adapters.models.common import N_SIMS
 from f1sim.adapters.models.pace import TABLES as PACE_TABLES
 from f1sim.adapters.models.pace import PaceContext, PacePredictor
 from f1sim.adapters.models.pace_filter import PaceHyper
+from f1sim.adapters.models.resets import ResetConfig, build_reset
 from f1sim.adapters.models.simulator import TABLES as SIMULATOR_TABLES
 from f1sim.adapters.models.simulator import SimulatorContext, SimulatorPredictor
 from f1sim.core.errors import DataError
@@ -32,6 +33,8 @@ class ModelOptions:
         n_sims: Simulated races per forecast for the simulator; its default when None.
         disabled: Simulator event components to switch off, for the ablation runner (P6-09).
         p_rain: Chance the simulator runs a race in the rain (P6-07); zero for dry.
+        reset: Pace prior-handling strategy at a regulation reset (P7-02); full history when
+            None, which is the Phase 3 behaviour.
     """
 
     pace_hyper: PaceHyper | None = None
@@ -40,6 +43,7 @@ class ModelOptions:
     n_sims: int | None = None
     disabled: frozenset[str] = frozenset()
     p_rain: float = 0.0
+    reset: ResetConfig | None = None
 
 
 def pace_context(options: ModelOptions) -> PaceContext:
@@ -57,6 +61,7 @@ def pace_context(options: ModelOptions) -> PaceContext:
         suppliers=load_engine_suppliers(),
         circuits=load_circuits(),
         state_store=options.state_store,
+        reset=build_reset(options.reset),
     )
 
 

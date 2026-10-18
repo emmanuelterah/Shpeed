@@ -5,6 +5,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- Regulation-reset study (Phase 7): `configs/natural-experiments.yaml` plus
+  `load_natural_experiments` declare each reset (2022 lap-level, 2014 results-level, 2026
+  lap-level) with the snapshot that pinned it, so an unsynced reset is recorded without being
+  run. Prior-handling strategies are config options (`ModelOptions.reset` / `PaceContext.reset`)
+  in `f1sim.adapters.models.resets`: full history, exponential decay, reset priors and
+  testing-informed priors. Only the car effects are reset; driver effects carry over. A
+  strategy's signature enters the pace model's version, so saved states are not reused across
+  strategies. `f1sim report recovery` walks the pace model across a reset once per strategy and
+  writes the recovery curves to `docs/research/regulation-reset.md` (P7-01 to P7-05).
+- `notebooks/01-regulation-reset.ipynb` runs the study end to end and executes in CI from a
+  clean environment against a pinned synthetic fixture (ADR-0001), with a `research`
+  dependency group and a `notebook` CI job.
+
 ### Changed
 - The simulator's track position is calibrated against real 2021 races (ADR-0008): a
   `pass_offset` of -1.4 log-odds brings on-track passing from 1.8 times the real rate to the

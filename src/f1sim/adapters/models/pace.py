@@ -26,6 +26,7 @@ from f1sim.adapters.models.pace_data import (
     event_cluster,
 )
 from f1sim.adapters.models.pace_filter import PaceFilter, PaceHyper, PaceState
+from f1sim.adapters.models.resets import FullHistory, ResetStrategy, reset_signature
 from f1sim.core.domain.entities import EventKey, SnapshotId
 from f1sim.core.domain.lineage import TeamLineage
 from f1sim.core.domain.prediction import PositionMatrix
@@ -54,6 +55,8 @@ class PaceContext:
         circuits: Circuit lengths and speed bands.
         cache: Session results shared across the races of one backtest.
         state_store: Where to save and find fitted states; None disables it.
+        reset: Prior-handling strategy at a regulation reset (P7-02); full history by
+            default, which is the Phase 3 behaviour.
     """
 
     hyper: PaceHyper
@@ -62,15 +65,17 @@ class PaceContext:
     circuits: CircuitTable
     cache: ObservationCache = field(default_factory=ObservationCache)
     state_store: FittedStateStore | None = None
+    reset: ResetStrategy = field(default_factory=FullHistory)
 
     @property
     def version(self) -> str:
-        """Model version, including a digest of the hyperparameters.
+        """Model version, including a digest of the hyperparameters and reset strategy.
 
         Returns:
             Such as ``1-3fa2c9d1``.
         """
-        digest = hashlib.sha256(json.dumps(self.hyper.to_dict(), sort_keys=True).encode())
+        settings = {"hyper": self.hyper.to_dict(), "reset": reset_signature(self.reset)}
+        digest = hashlib.sha256(json.dumps(settings, sort_keys=True).encode())
         return f"{MODEL_VERSION}-{digest.hexdigest()[:8]}"
 
     def with_hyper(self, hyper: PaceHyper) -> "PaceContext":
@@ -116,7 +121,9 @@ class PacePredictor:
         self._rng = np.random.default_rng(seed)
         self._context = context
         self._n_sims = n_sims
-        self.filter = PaceFilter(context.hyper, context.lineage, context.suppliers)
+        self.filter = PaceFilter(
+            context.hyper, context.lineage, context.suppliers, reset=context.reset
+        )
         self.p_dnf = 0.0
         self.observations: list[SessionObs] = []
         self.report = FitReport(0, None, None)
