@@ -52,7 +52,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v3
+      - uses: astral-sh/setup-uv@v7
       - run: uv sync --frozen --all-extras
       # Raw data stays out of git (ADR-0001); the Actions cache keeps the local store and
       # the FastF1/HTTP caches between runs so each run syncs only what is new.
