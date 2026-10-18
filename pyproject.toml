@@ -84,7 +84,7 @@ dev = [
   "import-linter>=2.1",
   "pre-commit>=3.8",
   "pip-audit>=2.7",
-  "pandas-stubs>=2.2,<3",
+  "pandas-stubs>=2.2,<4",
   # Official, signature-checked DuckLake binary as a wheel, so tests run without
   # downloading extensions. Production installs it with INSTALL ducklake.
   "duckdb-extension-ducklake==1.5.5",
