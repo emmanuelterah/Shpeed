@@ -131,7 +131,9 @@ def test_data_is_written_as_parquet_and_verify_finds_missing_files(tmp_path: Pat
     report = store.verify()
     assert report.ok
     assert report.files_checked >= 1
-    parquet = next((tmp_path / "lake" / "files").rglob("*.parquet"))
+    # A data file of the committed table; directory order varies by file system, and the
+    # catalog's own tables (such as _sync_runs) also live under files/
+    parquet = next(p for p in (tmp_path / "lake" / "files").rglob("*.parquet") if "laps" in p.parts)
     parquet.unlink()
     broken = store.verify()
     assert not broken.ok

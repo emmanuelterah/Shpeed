@@ -87,17 +87,29 @@ The full design (components, boundaries, data flow and decisions) is in [ARCHITE
 |---|---|
 | Repository structure, CI, linting, strict typing, import-layer checks | ✅ In place |
 | Core domain types, interfaces (ports), probability matrix, scoring metrics | ✅ Built, with unit and property tests |
-| Read-only API (`/health`, `/predictions`, `/predictions/latest`, `/predictions/{season}/{round}`) | ✅ Built, tested |
-| Web app shell: Race, Season, Calibration and About screens, Apple-style design system | ✅ Built; the Race screen shows clearly labelled sample data in development |
+| Read-only API (`/health`, `/predictions`, `/predictions/index`, `/predictions/latest`, `/predictions/{season}/{round}`) | ✅ Built, tested against the shared schemas |
+| Web app: Race, Season scoreboard, Calibration and About screens, Apple-style design system, WCAG AA in both themes | ✅ Built; shows clearly labelled sample data in development |
 | Docker Compose stack (API + web), with a hot-reload development mode | ✅ In place |
 | Data ingestion: `f1sim data sync`, `verify`, `report`, `gc` | ✅ Built and tested; 2021–2022 synced locally |
 | Baselines (grid + noise, Elo, Plackett–Luce) and the walk-forward backtester: `f1sim backtest` with leakage guard, report, benchmark records and regression gate | ✅ Built and tested; real 2021–2022 scores recorded in `benchmarks/` |
 | Pace model: fuel and track-evolution corrections, Bayesian team, engine and driver pace updated after every session (`f1sim pace fit`, `check`, `reference`, `update`), registered as the `pace` predictor | ✅ Built and tested on synthetic seasons; hyperparameters need fitting on real data |
 | Tyre, strategy and event models; Monte Carlo engine | 🔜 Phases 4–6 |
-| Automated race-weekend forecasts | 🔜 Phase 8 |
+| Forecast publishing and scoring: `f1sim predict`, `f1sim report score`, lights-out lock (ADR-0011), scheduled race-weekend workflow with retry and alerting | 🔍 Built and tested; waiting for its first live race weekend |
 | Public v1.0 with live forecasts | 🔜 Phase 9, targeted for the 2027 season opener |
 
-The `predict` and `report score` commands exist but raise `NotImplementedError` with the roadmap ID of the feature that will implement them.
+### Publishing a forecast
+
+```bash
+uv run f1sim predict --season 2027 --latest            # newest weekend past qualifying
+uv run f1sim report score --season 2027 --latest       # score the newest finished race
+uv run f1sim predict --season 2027 --round 3 --no-commit
+```
+
+Each command writes `predictions/<season>/<round>.json` and the rebuilt
+`predictions/index.json`, and commits both in one commit. Before lights out, a re-run with
+new data (a grid penalty, say) replaces the forecast and a re-run with the same result does
+nothing; after lights out only the score can be added. The race-weekend workflow runs exactly
+this through `scripts/race_weekend.sh`.
 
 ## Getting started
 
@@ -210,6 +222,7 @@ The API is **read-only**. It serves the published forecasts in `predictions/` an
 |---|---|
 | `GET /health` | Service status and version |
 | `GET /predictions` | Every published race, oldest first: `[{"season": 2027, "round": 1}, …]` |
+| `GET /predictions/index` | The scoreboard and calibration (`predictions/index.json`, [schema](schemas/predictions-index.v1.schema.json)), or `404` |
 | `GET /predictions/latest` | The most recent forecast, or `404` if none is published yet |
 | `GET /predictions/{season}/{round}` | One race's forecast, or `404` |
 
@@ -234,7 +247,7 @@ A forecast looks like this (abridged; the full contract is [`schemas/prediction-
 }
 ```
 
-`p_position[k]` is the probability of finishing in position k+1. Together with `p_dnf`, each driver's probabilities sum to 1. `score` is filled in by the post-race scoring run.
+`p_position[k]` is the probability of finishing in position k+1. Together with `p_dnf`, each driver's probabilities sum to 1. `score` is filled in by the post-race scoring run with the Brier scores, log loss, ranked probability score and each driver's official finishing position.
 
 ## The web app
 
@@ -242,8 +255,8 @@ The frontend in [`frontend/`](frontend/) is a React + TypeScript app built with 
 
 | Screen | Shows |
 |---|---|
-| Race | The latest forecast, with win, podium and points probabilities per driver |
-| Season | Every scored race and how the model did |
+| Race | The latest forecast (or any race from the Season screen), with win, podium and points probabilities per driver and the provenance needed to reproduce it |
+| Season | Every published race, its score, and the season's average scores |
 | Calibration | Predicted versus observed frequencies, as a chart and a table |
 | About | How the forecasts are made |
 

@@ -17,6 +17,7 @@ from typing import Annotated, Any, cast
 import pandas as pd
 import typer
 
+from f1sim import live
 from f1sim.adapters.benchmarks import check_regression, current_commit, record_run
 from f1sim.adapters.config_files import (
     load_natural_experiments,
@@ -27,7 +28,7 @@ from f1sim.adapters.models.pace import PacePredictor
 from f1sim.adapters.models.pace_checks import predictive_check
 from f1sim.adapters.models.pace_reference import fit_reference, prepare_laps
 from f1sim.adapters.models.pace_training import SamplerSettings, season_observations, train_pace
-from f1sim.adapters.models.registry import ModelOptions, get_model, model_names, pace_context
+from f1sim.adapters.models.registry import ModelOptions, get_model, pace_context
 from f1sim.adapters.models.resets import (
     DEFAULT_HALF_LIFE,
     DEFAULT_PRACTICE_WEIGHT,
@@ -35,7 +36,6 @@ from f1sim.adapters.models.resets import (
     STRATEGIES,
     ResetConfig,
 )
-from f1sim.adapters.models.simulator import COMPONENTS
 from f1sim.adapters.models.tyres import (
     attach_track_temperature,
     fit_tyre_model,
@@ -47,7 +47,9 @@ from f1sim.adapters.sources.http import HttpClient
 from f1sim.adapters.sources.jolpica_adapter import JolpicaAdapter
 from f1sim.adapters.store.ducklake_store import DuckLakeStore
 from f1sim.adapters.store.state_files import FileStateStore
+from f1sim.cli_args import parse_components, parse_model_list, parse_seasons
 from f1sim.core.domain.entities import EventKey, SessionKey, SnapshotId
+from f1sim.core.errors import ShpeedError
 from f1sim.core.ports.sources import SourceAdapter
 from f1sim.core.usecases.backtest import BacktestResult, walk_forward
 from f1sim.core.usecases.readers import FAR_FUTURE
@@ -76,6 +78,9 @@ CITATION_FOLDERS = (BENCHMARKS_DIR,)
 
 Season = Annotated[int, typer.Option(help="Season, for example 2025")]
 Round = Annotated[int, typer.Option("--round", help="Round number within the season")]
+OptionalRound = Annotated[
+    int | None, typer.Option("--round", help="Round number; omit when passing --latest")
+]
 
 
 @app.callback()
@@ -315,72 +320,65 @@ def _snapshot_ids(data: Any) -> set[int]:
     return found
 
 
-@app.command(help="Predict one race and write its prediction record.")
-def predict(season: Season, round_: Round) -> None:
-    """Predict one race and write its prediction record (P8-01).
+@app.command(help="Forecast one race and publish its prediction record.")
+def predict(  # pylint: disable=too-many-arguments
+    ctx: typer.Context,
+    season: Season,
+    round_: OptionalRound = None,
+    *,
+    model: Annotated[str, typer.Option(help="Registered model to forecast with")] = "simulator",
+    latest: Annotated[
+        bool,
+        typer.Option("--latest", help="Use the newest weekend past qualifying (scheduled runs)"),
+    ] = False,
+    rain: Annotated[
+        float, typer.Option("--rain", min=0.0, max=1.0, help="Rain chance fed to the simulator")
+    ] = 0.0,
+    commit: Annotated[
+        bool, typer.Option("--commit/--no-commit", help="Commit the record to git")
+    ] = True,
+) -> None:
+    """Forecast one race and publish its record (P8-01, P8-02, P8-03, P8-06).
+
+    Before lights out a re-run with new data replaces the record and a re-run with the same
+    result is a no-op; after lights out the forecast is locked (ADR-0011).
 
     Args:
+        ctx: Typer context holding settings.
         season: Season of the race.
-        round_: Round number of the race.
+        round_: Round number; omit and pass ``--latest`` for the newest unraced weekend.
+        model: Registered model name to forecast with.
+        latest: Pick the newest weekend with qualifying and no race result.
+        rain: Rain probability fed to the simulator.
+        commit: Whether to commit the record and index to git.
 
     Raises:
-        NotImplementedError: Always, until P8-01 is built.
+        BadParameter: If ``--round`` and ``--latest`` are both or neither given, or the model
+            name is unknown.
+        Exit: With status 1 when the race cannot be forecast or the record is locked.
     """
-    raise NotImplementedError(f"P8-01: predict {season} round {round_}")
-
-
-def parse_seasons(text: str) -> tuple[int, ...]:
-    """Parse a season list such as ``2022-2025`` or ``2021,2023``.
-
-    Args:
-        text: Comma-separated seasons or inclusive ranges.
-
-    Returns:
-        The seasons in ascending order, without duplicates.
-
-    Raises:
-        typer.BadParameter: If the text is not a season list.
-    """
-    seasons: set[int] = set()
+    settings: Settings = ctx.obj["settings"]
+    names = parse_model_list(model)
+    if len(names) != 1:
+        raise typer.BadParameter("predict takes exactly one model")
+    options = replace(_model_options(settings), p_rain=rain)
+    store = open_store(settings)
     try:
-        for part in (p.strip() for p in text.split(",") if p.strip()):
-            first, _, last = part.partition("-")
-            seasons.update(range(int(first), int(last or first) + 1))
-    except ValueError as exc:
-        raise typer.BadParameter(f"{text!r} is not a season list like 2022-2025") from exc
-    if not seasons:
-        raise typer.BadParameter("give at least one season")
-    return tuple(sorted(seasons))
-
-
-def _model_list(text: str) -> list[str]:
-    names = model_names() if text == "all" else [m.strip() for m in text.split(",") if m.strip()]
-    unknown = [n for n in names if n not in model_names()]
-    if unknown or not names:
-        choices = ", ".join(model_names())
-        raise typer.BadParameter(f"unknown model {', '.join(unknown)}; choose from {choices}")
-    return names
-
-
-def _components(text: str) -> frozenset[str]:
-    """Parse the ``--ablate`` list into the set of event components to switch off (P6-09).
-
-    Args:
-        text: Comma-separated component names, or empty for none.
-
-    Returns:
-        The components to disable.
-
-    Raises:
-        typer.BadParameter: If a name is not a known event component.
-    """
-    names = {name.strip() for name in text.split(",") if name.strip()}
-    unknown = names - set(COMPONENTS)
-    if unknown:
-        choices = ", ".join(COMPONENTS)
-        bad = ", ".join(sorted(unknown))
-        raise typer.BadParameter(f"unknown component {bad}; choose from {choices}")
-    return frozenset(names)
+        outcome = live.run_predict(
+            store,
+            settings,
+            live.Target(season, round_, latest),
+            name=names[0],
+            options=options,
+            commit=commit,
+            now=_now(),
+        )
+    except ShpeedError as exc:
+        typer.secho(f"predict failed: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from exc
+    finally:
+        store.close()
+    typer.secho(outcome.message, fg=typer.colors.GREEN if outcome.result else None)
 
 
 @app.command(help="Walk-forward backtest of registered models, with report and benchmarks.")
@@ -418,9 +416,9 @@ def backtest(  # pylint: disable=too-many-arguments,too-many-locals
         typer.Exit: With status 1 when ``check`` finds a regression.
     """
     settings: Settings = ctx.obj["settings"]
-    names = _model_list(model)
+    names = parse_model_list(model)
     years = parse_seasons(seasons)
-    options = replace(_model_options(settings), disabled=_components(ablate))
+    options = replace(_model_options(settings), disabled=parse_components(ablate))
     store = open_store(settings)
     try:
         snapshot = store.latest_snapshot()
@@ -797,17 +795,49 @@ def tyres_windows(
 
 
 @report_app.command("score", help="Score a published prediction against the official result.")
-def report_score(season: Season, round_: Round) -> None:
-    """Score a published prediction against the official result (P8-07).
+def report_score(
+    ctx: typer.Context,
+    season: Season,
+    round_: OptionalRound = None,
+    *,
+    latest: Annotated[
+        bool,
+        typer.Option("--latest", help="Use the newest race with a stored result (scheduled runs)"),
+    ] = False,
+    commit: Annotated[
+        bool, typer.Option("--commit/--no-commit", help="Commit the scored record to git")
+    ] = True,
+) -> None:
+    """Fill in the score of one published prediction and refresh the scoreboard (P8-07).
 
     Args:
+        ctx: Typer context holding settings.
         season: Season of the race.
-        round_: Round number of the race.
+        round_: Round number; omit and pass ``--latest`` for the newest raced weekend.
+        latest: Pick the newest weekend with an official race result.
+        commit: Whether to commit the scored record and index to git.
 
     Raises:
-        NotImplementedError: Always, until P8-07 is built.
+        BadParameter: If ``--round`` and ``--latest`` are both or neither given.
+        Exit: With status 1 when the race has no result or no published prediction.
     """
-    raise NotImplementedError(f"P8-07: score {season} round {round_}")
+    settings: Settings = ctx.obj["settings"]
+    store = open_store(settings)
+    try:
+        outcome = live.run_score(
+            store, settings, live.Target(season, round_, latest), commit=commit, now=_now()
+        )
+    except ShpeedError as exc:
+        typer.secho(f"scoring failed: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from exc
+    finally:
+        store.close()
+    typer.secho(outcome.message, fg=typer.colors.GREEN if outcome.result else None)
+    if outcome.score is not None:
+        typer.echo(
+            f"RPS {outcome.score.rps:.4f} · log loss {outcome.score.log_loss:.4f} · "
+            f"Brier (win) {outcome.score.brier_win:.4f}"
+        )
 
 
 @report_app.command("ablation", help="Switch each event component off and score the change.")

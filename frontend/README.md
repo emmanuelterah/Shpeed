@@ -6,8 +6,8 @@ The public UI for Shpeed predictions: race forecasts, the season scoreboard and 
 pnpm install
 pnpm dev          # local dev server; shows clearly-labelled sample data until real predictions exist
 pnpm lint && pnpm typecheck && pnpm test
-pnpm gen:types    # regenerate src/types/prediction.ts from ../schemas
-pnpm test:e2e     # Playwright smoke tests on desktop Safari and iPhone viewports
+pnpm gen:types    # regenerate src/types from ../schemas (CI fails if they are stale)
+pnpm test:e2e     # Playwright smoke tests and a WCAG AA scan, desktop Safari and iPhone
 ```
 
 ## Structure
@@ -19,8 +19,8 @@ src/
   components/   design-system primitives, one folder each with its CSS module and test
   features/     one folder per screen: race, season, calibration, about
   lib/          data loading and formatting
-  types/        generated from the shared JSON Schema
+  types/        generated from the shared JSON Schemas
   fixtures/     sample data for development and tests (never shown as real)
   test/         test setup
-e2e/            Playwright tests
+e2e/            Playwright tests; fixtures/ holds records written by the Python publisher
 ```

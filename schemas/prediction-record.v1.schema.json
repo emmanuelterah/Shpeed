@@ -14,7 +14,11 @@
     "data_cutoff": { "type": "string", "format": "date-time", "description": "Latest data the model was allowed to see (end of qualifying)" },
     "snapshot_id": { "type": "integer", "minimum": 0, "description": "DuckLake snapshot the run read (ADR-0002)" },
     "model_version": { "type": "string" },
-    "git_commit": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+    "git_commit": {
+      "type": "string",
+      "pattern": "^([0-9a-f]{7,40}(-dirty)?|unknown)$",
+      "description": "Build commit; -dirty if uncommitted changes existed; 'unknown' outside a checkout"
+    },
     "n_sims": { "type": "integer", "minimum": 1 },
     "seed": { "type": "integer" },
     "p_rain": { "type": "number", "minimum": 0, "maximum": 1 },
@@ -37,13 +41,21 @@
     },
     "score": {
       "type": ["object", "null"],
+      "description": "Filled in by the scoring run after the race (P8-07); null until then",
       "additionalProperties": false,
+      "required": ["brier_win", "brier_podium", "brier_top10", "log_loss", "rps", "scored_at", "positions"],
       "properties": {
-        "brier_win": { "type": "number" },
-        "brier_podium": { "type": "number" },
-        "log_loss": { "type": "number" },
-        "rps": { "type": "number" },
-        "scored_at": { "type": "string", "format": "date-time" }
+        "brier_win": { "type": "number", "minimum": 0 },
+        "brier_podium": { "type": "number", "minimum": 0 },
+        "brier_top10": { "type": "number", "minimum": 0 },
+        "log_loss": { "type": "number", "minimum": 0 },
+        "rps": { "type": "number", "minimum": 0 },
+        "scored_at": { "type": "string", "format": "date-time" },
+        "positions": {
+          "type": "array",
+          "items": { "type": ["integer", "null"], "minimum": 1 },
+          "description": "Finishing position among the forecast drivers, in drivers order; null = DNF"
+        }
       }
     }
   }
