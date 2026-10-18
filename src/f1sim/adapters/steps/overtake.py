@@ -72,7 +72,7 @@ class OvertakeStep:
             rng: Seeded random generator.
         """
         order = np.argsort(lap_start_times(state), axis=1, kind="stable")
-        active = state.running & ~state.pit_this_lap
+        active = state.running & ~state.pit_this_lap & ~state.neutralised
         times = state.race_time_s.copy()
         chain = _Chain(state.n_sims)
         for k in range(state.n_cars):

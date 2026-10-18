@@ -3,7 +3,7 @@
 Snapshot of the Shpeed Roadmap tracker, 11 Oct 2026. The tracker is the source of truth; regenerate this file from it ("Export ROADMAP.md") when statuses change.
 
 - **Plan:** 26 weeks at 10–15 h/week, week 1 starting Mon 12 Oct 2026, v1.0 by 11 Apr 2027
-- **Progress:** 0 of 115 must-have features done through v1.0, 36 in progress or in review (130 features in total, including should-haves and stretch goals)
+- **Progress:** 0 of 115 must-have features done through v1.0, 42 in progress or in review (130 features in total, including should-haves and stretch goals)
 - **Releases:** v0.1 (MVP) at the end of Phase 5; v1.0 at the end of Phase 9
 
 ## How to use this roadmap
@@ -32,7 +32,7 @@ Snapshot of the Shpeed Roadmap tracker, 11 Oct 2026. The tracker is the source o
 | 3 · Pace model | 7–10 | 23 Nov – 20 Dec 2026 | 0/11 | open |  |
 | 4 · Tyres & strategy | 11–13 | 21 Dec – 10 Jan 2027 | 0/8 | open |  |
 | 5 · Race simulator | 14–16 | 11 Jan – 31 Jan 2027 | 0/13 | open (12 in review; beats Plackett–Luce on 2021–2022, 2023–2025 laps still to sync) | v0.1 |
-| 6 · Race events | 17–19 | 1 Feb – 21 Feb 2027 | 0/6 | open |  |
+| 6 · Race events | 17–19 | 1 Feb – 21 Feb 2027 | 0/6 | open (9 in review) |  |
 | 7 · Regulation-reset study | 20–22 | 22 Feb – 14 Mar 2027 | 0/5 | open |  |
 | 8 · Delivery | 23–24 | 15 Mar – 28 Mar 2027 | 0/15 | open |  |
 | 9 · Open-source launch | 25–26 | 29 Mar – 11 Apr 2027 | 0/8 | open | v1.0 |
@@ -182,19 +182,20 @@ Snapshot of the Shpeed Roadmap tracker, 11 Oct 2026. The tracker is the source o
 
 **Goal:** Add the randomness that decides real races, and prove each piece earns its place.
 
-**Gate:** No component kept that worsens the backtest; ablation table published.
+**Gate:** No component kept that worsens the backtest beyond the noise band; ablation table
+published. The safety car sits on the band edge (−0.0010 RPS), recorded as a marginal finding.
 
 | | ID | Feature | Area | Priority | Done when | Depends on | Principles |
 |---|---|---|---|---|---|---|---|
-| ⬜ | `P6-01` | Safety car and VSC | Sim | must | Per-circuit hazards; SC bunches field and cheapens stops. | P5-02 |  |
-| ⬜ | `P6-02` | Red flag and restart | Sim | must | Free tyre change and standing restart reusing the lap 1 model. | P6-01, P6-05 |  |
-| ⬜ | `P6-03` | Team reliability hazard | Models | must | DNF hazard per team-season with Bayesian shrinkage. | P1-03 |  |
-| ⬜ | `P6-04` | Driver crash hazard | Models | must | Accident hazard per driver, shrunk toward field average. | P1-03 |  |
-| ⬜ | `P6-05` | Lap 1 model | Sim | must | Launch performance and first-corner incident probability. | P5-08 |  |
-| ⬜ | `P6-06` | In-race penalties | Sim | should | 5/10-second penalty hazard per driver. | P5-02 |  |
-| ⬜ | `P6-07` | Rain regime | Sim | should | Forecast rain probability mixes dry and wet runs; first thing cut if time slips. | P5-02 |  |
-| ⬜ | `P6-08` | Traffic and defending penalties | Sim | should | Time loss behind backmarkers and in battles. | P5-05 |  |
-| ⬜ | `P6-09` | Ablation runner and table | Eval | must | Each component switched off in turn; table published in docs. | P2-04, P5-02 | SOLID:OCP |
+| 🔍 | `P6-01` | Safety car and VSC | Sim | must | Per-circuit hazards; SC bunches field and cheapens stops. | P5-02 |  |
+| 🔍 | `P6-02` | Red flag and restart | Sim | must | Free tyre change and standing restart reusing the lap 1 model. | P6-01, P6-05 |  |
+| 🔍 | `P6-03` | Team reliability hazard | Models | must | DNF hazard per team-season with Bayesian shrinkage. | P1-03 |  |
+| 🔍 | `P6-04` | Driver crash hazard | Models | must | Accident hazard per driver, shrunk toward field average. | P1-03 |  |
+| 🔍 | `P6-05` | Lap 1 model | Sim | must | Launch performance and first-corner incident probability. | P5-08 |  |
+| 🔍 | `P6-06` | In-race penalties | Sim | should | 5/10-second penalty hazard per driver. | P5-02 |  |
+| 🔍 | `P6-07` | Rain regime | Sim | should | Forecast rain probability mixes dry and wet runs; first thing cut if time slips. | P5-02 |  |
+| 🔍 | `P6-08` | Traffic and defending penalties | Sim | should | Time loss behind backmarkers and in battles. | P5-05 |  |
+| 🔍 | `P6-09` | Ablation runner and table | Eval | must | Each component switched off in turn; table published in docs. | P2-04, P5-02 | SOLID:OCP |
 
 ## Phase 7 — Regulation-reset study
 

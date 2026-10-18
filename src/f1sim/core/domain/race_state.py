@@ -12,7 +12,7 @@ from numpy.typing import NDArray
 
 
 @dataclass
-class RaceState:
+class RaceState:  # pylint: disable=too-many-instance-attributes
     """Mutable per-lap state for ``n_sims`` parallel races; LapSteps update it in place.
 
     Attributes:
@@ -26,6 +26,9 @@ class RaceState:
         race_time_s: Cumulative race time in seconds; infinite once retired.
         lap_time_s: Time of the lap just completed in seconds.
         pit_this_lap: Whether the car stopped on the lap just completed.
+        safety_car: Neutralisation level per simulation (0 none, 1 VSC, 2 safety car, 3 red
+            flag), of shape ``(n_sims,)`` and shared by every car, set by the event steps
+            (P6-01); None when the race has no event steps.
     """
 
     lap: int
@@ -38,6 +41,7 @@ class RaceState:
     race_time_s: NDArray[np.float64]
     lap_time_s: NDArray[np.float64]
     pit_this_lap: NDArray[np.bool_]
+    safety_car: NDArray[np.int_] | None = None
 
     @property
     def n_sims(self) -> int:
@@ -53,6 +57,17 @@ class RaceState:
     def running(self) -> NDArray[np.bool_]:
         """Which cars are still running, of shape ``(n_sims, n_cars)``."""
         return ~self.retired
+
+    @property
+    def neutralised(self) -> NDArray[np.bool_]:
+        """Which cars are behind a safety car or VSC, of shape ``(n_sims, n_cars)``.
+
+        False everywhere when no event step has set a level, so a Phase 5 pipeline still runs.
+        """
+        if self.safety_car is None:
+            return np.zeros(self.race_time_s.shape, dtype=bool)
+        levels = np.broadcast_to(self.safety_car[:, np.newaxis], self.race_time_s.shape)
+        return (levels > 0).astype(np.bool_)
 
 
 def update_order(state: RaceState) -> None:
@@ -118,3 +133,28 @@ def ahead_in_order(times: NDArray[np.float64]) -> NDArray[np.int_]:
     sims = np.arange(times.shape[0], dtype=np.int64).reshape(-1, 1)
     ahead[sims, order[:, 1:]] = order[:, :-1]
     return ahead
+
+
+def following_fraction(state: RaceState, window_s: float) -> NDArray[np.float64]:
+    """How close each car is to the car ahead at the start of the lap, in ``[0, 1]``.
+
+    Shared by the dirty-air and defending steps: one charges the follower, the other the car
+    being followed, but both read the same start-of-lap gap and taper to zero at the window edge.
+
+    Args:
+        state: The state part-way through a lap.
+        window_s: Gap within which the effect is felt, seconds.
+
+    Returns:
+        Array of shape ``(n_sims, n_cars)``: 1 at zero gap, tapering to 0 at the window edge and
+        0 for a leader, a retired car or a car further ahead than ``window_s``.
+    """
+    start = lap_start_times(state)
+    ahead = ahead_in_order(start)
+    finite = np.isfinite(start)
+    index = np.where(ahead >= 0, ahead, 0)
+    valid = finite & (ahead >= 0) & np.take_along_axis(finite, index, axis=1)
+    known = np.where(finite, start, 0.0)
+    gap = known - np.take_along_axis(known, index, axis=1)
+    fraction = np.clip((window_s - gap) / window_s, 0.0, 1.0)
+    return np.where(valid, fraction, 0.0).astype(np.float64)
