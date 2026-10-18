@@ -41,6 +41,18 @@ jobs:
           uv run twine check --strict dist/*
           uv run check-wheel-contents dist/*.whl
 
+  notebook:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync --all-extras --group research
+      - name: Execute the regulation-reset notebook from a clean environment (P7-04)
+        run: |
+          uv run --group research jupyter nbconvert --to notebook --execute \
+            --ExecutePreprocessor.timeout=900 \
+            notebooks/01-regulation-reset.ipynb --output /tmp/regulation-reset.ipynb
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
