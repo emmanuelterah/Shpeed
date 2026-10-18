@@ -8,61 +8,25 @@ Races are independent, so they run in parallel threads; every race gets its own 
 derived from the base seed, so results do not depend on scheduling.
 """
 
-import math
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from datetime import datetime
 
 import numpy as np
-import pandas as pd
 from numpy.typing import NDArray
 
 from f1sim.core.domain.entities import EventKey, SnapshotId
 from f1sim.core.domain.prediction import PositionMatrix
-from f1sim.core.domain.race import RaceEntry, encode_outcome
+from f1sim.core.domain.race import encode_outcome
 from f1sim.core.errors import InvariantError
 from f1sim.core.ports.predictor import ModelSpec, PredictorFactory
 from f1sim.core.ports.store import DataReader
 from f1sim.core.scoring.metrics import CalibrationBin, calibration_bins
 from f1sim.core.scoring.race_score import EVENTS, RaceScore, event_forecasts, score_race
-from f1sim.core.usecases.readers import FAR_FUTURE, CutoffReader, FrameReader
+from f1sim.core.usecases.planning import RacePlan, SkippedRace, plan_races
+from f1sim.core.usecases.readers import CutoffReader, FrameReader
 
-SPRINT_SETS_GRID = frozenset({2021, 2022})
-"""Seasons in which the sprint result, not qualifying, decided the race grid."""
-
-PRE_RACE_SESSIONS = ("Q", "S")
 METRICS = ("brier_win", "brier_podium", "brier_top10", "log_loss", "rps", "spearman")
-
-
-@dataclass(frozen=True)
-class RacePlan:
-    """One race to forecast, with everything known at its cutoff.
-
-    Attributes:
-        event: The race weekend.
-        cutoff: End of the last pre-race session; the model may see nothing later.
-        entries: The starters, with their expected grid positions.
-        classified: ``(driver_id, position)`` of every classified finisher, for scoring.
-    """
-
-    event: EventKey
-    cutoff: datetime
-    entries: tuple[RaceEntry, ...]
-    classified: tuple[tuple[str, int], ...]
-
-
-@dataclass(frozen=True)
-class SkippedRace:
-    """A race the backtest could not forecast.
-
-    Attributes:
-        event: The race weekend.
-        reason: Why it was skipped.
-    """
-
-    event: EventKey
-    reason: str
 
 
 @dataclass(frozen=True)
@@ -97,44 +61,6 @@ class BacktestResult:
             return {}
         means = {m: float(np.mean([getattr(r, m) for r in self.races])) for m in METRICS}
         return {**means, "races": float(len(self.races))}
-
-
-def plan_races(
-    reader: DataReader, snapshot: SnapshotId, seasons: Sequence[int]
-) -> tuple[list[RacePlan], list[SkippedRace]]:
-    """Find every scorable race in some seasons and what was known before each.
-
-    Planning reads results with no cutoff because it is the evaluator, not a model;
-    models only ever see data through the ``CutoffReader`` built from each plan. The cutoff
-    is the latest moment any source records for the weekend's pre-race sessions ending, from
-    the results and from the lap timing (ADR-0005): one source may know only the date of a
-    session and guess its time, which would otherwise hide that session from the models.
-
-    Args:
-        reader: The data store.
-        snapshot: Snapshot to read.
-        seasons: Seasons to include.
-
-    Returns:
-        The races to forecast in calendar order, and the races that had to be skipped.
-    """
-    results = reader.read("results", snapshot=snapshot, as_of=FAR_FUTURE)
-    results = results.loc[results["season"].isin(list(seasons))]
-    session_ends = _session_ends(reader.read("laps", snapshot=snapshot, as_of=FAR_FUTURE))
-    plans: list[RacePlan] = []
-    skipped: list[SkippedRace] = []
-    races = results.loc[results["session"] == "R", ["season", "round"]].drop_duplicates()
-    for season, round_ in sorted(map(tuple, races.to_numpy().tolist())):
-        event = EventKey(int(season), int(round_))
-        weekend: pd.DataFrame = results.loc[
-            (results["season"] == event.season) & (results["round"] == event.round)
-        ]
-        plan = _plan_one(event, weekend, session_ends.get((event.season, event.round)))
-        if isinstance(plan, SkippedRace):
-            skipped.append(plan)
-        else:
-            plans.append(plan)
-    return plans, skipped
 
 
 def walk_forward(
@@ -210,59 +136,6 @@ def _race_runner(
         return score_race(plan.event.season, plan.event.round, matrix, outcome), (matrix, outcome)
 
     return _run
-
-
-def _session_ends(laps: pd.DataFrame) -> dict[tuple[int, int], datetime]:
-    """When the lap timing says each weekend's last pre-race session ended."""
-    if laps.empty:
-        return {}
-    pre = laps.loc[laps["session"].isin(list(PRE_RACE_SESSIONS))]
-    ends: dict[tuple[int, int], datetime] = {}
-    moments = pd.to_datetime(pre["available_at"]).tolist()
-    for season, round_, moment in zip(
-        pre["season"].tolist(), pre["round"].tolist(), moments, strict=True
-    ):
-        key = (int(season), int(round_))
-        when = pd.Timestamp(moment).to_pydatetime()
-        if key not in ends or when > ends[key]:
-            ends[key] = when
-    return ends
-
-
-def _plan_one(
-    event: EventKey, weekend: pd.DataFrame, timing_end: datetime | None
-) -> RacePlan | SkippedRace:
-    pre = weekend.loc[weekend["session"].isin(list(PRE_RACE_SESSIONS))]
-    if pre.empty:
-        return SkippedRace(event, "no qualifying or sprint results before the race")
-    race = weekend.loc[weekend["session"] == "R"]
-    grid_session = "Q" if "Q" in set(pre["session"].tolist()) else "S"
-    sprint = "S" in set(pre["session"].tolist())
-    if event.season in SPRINT_SETS_GRID and sprint:
-        grid_session = "S"
-    entries = _entries(pre.loc[pre["session"] == grid_session])
-    classified = tuple(
-        (str(d), int(p))
-        for d, p in zip(race["driver_id"].tolist(), race["position"].tolist(), strict=True)
-        if not pd.isna(p)
-    )
-    cutoff = pd.Timestamp(pre["available_at"].max()).to_pydatetime()
-    race_known = pd.Timestamp(pd.to_datetime(race["available_at"]).min()).to_pydatetime()
-    if timing_end is not None and timing_end < race_known:
-        cutoff = max(cutoff, timing_end)
-    return RacePlan(event, cutoff, entries, classified)
-
-
-def _entries(session: pd.DataFrame) -> tuple[RaceEntry, ...]:
-    """Starters in grid order: classified drivers by position, then the rest."""
-    drivers = [str(d) for d in session["driver_id"].tolist()]
-    teams = [str(t) for t in session["team_id"].tolist()]
-    positions = [math.nan if pd.isna(p) else float(p) for p in session["position"].tolist()]
-    order = sorted(range(len(drivers)), key=lambda i: (np.isnan(positions[i]), positions[i]))
-    return tuple(
-        RaceEntry(driver_id=drivers[i], team_id=teams[i], grid=g)
-        for g, i in enumerate(order, start=1)
-    )
 
 
 def _calibration(forecasts: Sequence[_Forecast]) -> dict[str, list[CalibrationBin]]:

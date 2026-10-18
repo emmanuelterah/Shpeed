@@ -1,34 +1,125 @@
-# Scheduled race-weekend automation (roadmap P8-06, P8-07).
-# Manual trigger only until Phase 8; the schedule is added once the gate for Phase 5 has passed.
+# Race-weekend automation (P8-06 predict, P8-07 score, P8-08 retry and alert).
+#
+# The schedule fires every two hours from Saturday to Monday morning (UTC). Each run syncs
+# the data, forecasts the newest weekend past qualifying and scores the newest finished race;
+# every step is a no-op when there is nothing to do, so firing often is safe and catches
+# qualifying in every time zone, including Saturday-morning UTC sessions such as Las Vegas.
+# A failed run is retried once; if the retry fails too, an issue is opened (or commented on)
+# and both runs' logs are kept as artifacts.
 name: Race weekend
 
 on:
+  schedule:
+    - cron: "17 */2 * * 6" # Saturday: after qualifying, all time zones
+    - cron: "17 */2 * * 0" # Sunday: late qualifying, then the race results
+    - cron: "17 0-12/2 * * 1" # Monday morning: late results and stewards' changes
   workflow_dispatch:
     inputs:
-      season:
-        required: true
-      round:
-        required: true
       stage:
+        description: What to run
         type: choice
-        options: [predict, score]
+        options: [all, predict, score]
+        default: all
+      season:
+        description: "Season (default: the current year)"
+        required: false
+      round:
+        description: "Round (default: the newest matching weekend)"
+        required: false
 
+# One run at a time, never cancelled: two runs must not race to commit the same round
 concurrency:
-  group: race-weekend-${{ inputs.season }}-${{ inputs.round }}
+  group: race-weekend
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
+
+env:
+  STAGE: ${{ inputs.stage || 'all' }}
+  SEASON: ${{ inputs.season }}
+  ROUND: ${{ inputs.round }}
+  F1SIM_MODEL: simulator
 
 jobs:
   run:
     runs-on: ubuntu-latest
-    steps:
+    timeout-minutes: 120
+    permissions:
+      contents: write
+      actions: write
+    steps: &run-steps
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v3
-      - run: uv sync --all-extras
-      - run: uv run f1sim data sync --season ${{ inputs.season }}
-      - if: inputs.stage == 'predict'
-        run: uv run f1sim predict --season ${{ inputs.season }} --round ${{ inputs.round }}
-      - if: inputs.stage == 'score'
-        run: uv run f1sim report score --season ${{ inputs.season }} --round ${{ inputs.round }}
+      - run: uv sync --frozen --all-extras
+      # Raw data stays out of git (ADR-0001); the Actions cache keeps the local store and
+      # the FastF1/HTTP caches between runs so each run syncs only what is new.
+      - name: Restore the data store
+        uses: actions/cache@v4
+        with:
+          path: data
+          key: race-data-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+          restore-keys: race-data-
+      - name: Configure the commit identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Sync, forecast, score and push
+        id: weekend
+        run: bash scripts/race_weekend.sh "$STAGE" "${SEASON:-$(date -u +%Y)}" "$ROUND"
+      # A push made with the workflow token starts no other workflow, so the site is
+      # redeployed explicitly whenever a record was published or scored (P8-14)
+      - name: Redeploy the site
+        if: steps.weekend.outputs.pushed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --ref "${{ github.ref_name }}"
+      - name: Keep the run log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: race-weekend-${{ github.job }}-${{ github.run_id }}
+          path: logs/
+          retention-days: 90
+          if-no-files-found: ignore
+
+  # P8-08: retry once. A fresh job gets a fresh runner and picks up anything the first
+  # attempt committed and pushed; every step is idempotent, so a partial first run is safe.
+  retry:
+    needs: run
+    if: failure()
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: write
+      actions: write
+    steps: *run-steps
+
+  alert:
+    needs: [run, retry]
+    if: failure() && needs.retry.result == 'failure'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SERVER: ${{ github.server_url }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          title="Race-weekend run failed"
+          logs="$SERVER/$GH_REPO/actions/runs/$RUN_ID"
+          body="The race-weekend run failed twice (stage $STAGE). Logs and artifacts: $logs"
+          existing=$(gh issue list --state open --label race-weekend --search "$title in:title" \
+            --json number --jq '.[0].number')
+          if [[ -n "$existing" ]]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh label create race-weekend --color C2341F --force \
+              --description "Scheduled race-weekend automation"
+            gh issue create --title "$title" --label race-weekend --body "$body"
+          fi

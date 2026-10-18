@@ -1,0 +1,243 @@
+{
+  "schema_version": 1,
+  "latest": "2027/08.json",
+  "races": [
+    {
+      "season": 2027,
+      "round": 1,
+      "path": "2027/01.json",
+      "data_cutoff": "2027-03-13T16:00:00Z",
+      "model_version": "sample",
+      "n_drivers": 20,
+      "score": {
+        "brier_win": 0.043152,
+        "brier_podium": 0.107977,
+        "brier_top10": 0.202111,
+        "log_loss": 2.762531,
+        "rps": 0.149975,
+        "scored_at": "2027-03-15T18:00:00Z"
+      },
+      "event_name": "Sample Grand Prix"
+    },
+    {
+      "season": 2027,
+      "round": 2,
+      "path": "2027/02.json",
+      "data_cutoff": "2027-03-27T16:00:00Z",
+      "model_version": "sample",
+      "n_drivers": 20,
+      "score": {
+        "brier_win": 0.051216,
+        "brier_podium": 0.142034,
+        "brier_top10": 0.275386,
+        "log_loss": 3.207173,
+        "rps": 0.178404,
+        "scored_at": "2027-03-29T18:00:00Z"
+      },
+      "event_name": "Harbour Grand Prix"
+    },
+    {
+      "season": 2027,
+      "round": 3,
+      "path": "2027/03.json",
+      "data_cutoff": "2027-04-10T16:00:00Z",
+      "model_version": "sample",
+      "n_drivers": 20,
+      "score": {
+        "brier_win": 0.047367,
+        "brier_podium": 0.136348,
+        "brier_top10": 0.213333,
+        "log_loss": 3.016252,
+        "rps": 0.14794,
+        "scored_at": "2027-04-12T18:00:00Z"
+      },
+      "event_name": "Desert Grand Prix"
+    },
+    {
+      "season": 2027,
+      "round": 4,
+      "path": "2027/04.json",
+      "data_cutoff": "2027-04-24T16:00:00Z",
+      "model_version": "sample",
+      "n_drivers": 20,
+      "score": {
+        "brier_win": 0.04914,
+        "brier_podium": 0.138195,
+        "brier_top10": 0.196518,
+        "log_loss": 2.868805,
+        "rps": 0.144855,
+        "scored_at": "2027-04-26T18:00:00Z"
+      },
+      "event_name": "Lakeside Grand Prix"
+    },
+    {
+      "season": 2027,
+      "round": 5,
+      "path": "2027/05.json",
+      "data_cutoff": "2027-05-08T16:00:00Z",
+      "model_version": "sample",
+      "n_drivers": 20,
+      "score": {
+        "brier_win": 0.045336,
+        "brier_podium": 0.138137,
+        "brier_top10": 0.216503,
+        "log_loss": 3.015666,
+        "rps": 0.150858,
+        "scored_at": "2027-05-10T18:00:00Z"
+      },
+      "event_name": "Mountain Grand Prix"
+    },
+    {
+      "season": 2027,
+      "round": 6,
+      "path": "2027/06.json",
+      "data_cutoff": "2027-05-22T16:00:00Z",
+      "model_version": "sample",
+      "n_drivers": 20,
+      "score": {
+        "brier_win": 0.047866,
+        "brier_podium": 0.123644,
+        "brier_top10": 0.195757,
+        "log_loss": 2.804358,
+        "rps": 0.151772,
+        "scored_at": "2027-05-24T18:00:00Z"
+      },
+      "event_name": "Riverside Grand Prix"
+    },
+    {
+      "season": 2027,
+      "round": 7,
+      "path": "2027/07.json",
+      "data_cutoff": "2027-06-05T16:00:00Z",
+      "model_version": "sample",
+      "n_drivers": 20,
+      "score": null,
+      "event_name": "Coastal Grand Prix"
+    },
+    {
+      "season": 2027,
+      "round": 8,
+      "path": "2027/08.json",
+      "data_cutoff": "2027-06-19T16:00:00Z",
+      "model_version": "sample",
+      "n_drivers": 20,
+      "score": null,
+      "event_name": "Forest Grand Prix"
+    }
+  ],
+  "calibration": {
+    "races_scored": 6,
+    "forecasts": 120,
+    "events": [
+      {
+        "event": "win",
+        "label": "Win",
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.1,
+            "mean_forecast": 0.042014,
+            "observed": 0.04717,
+            "count": 106
+          },
+          {
+            "low": 0.1,
+            "high": 0.2,
+            "mean_forecast": 0.110464,
+            "observed": 0.071429,
+            "count": 14
+          }
+        ]
+      },
+      {
+        "event": "podium",
+        "label": "Podium",
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.1,
+            "mean_forecast": 0.068078,
+            "observed": 0.083333,
+            "count": 48
+          },
+          {
+            "low": 0.1,
+            "high": 0.2,
+            "mean_forecast": 0.146408,
+            "observed": 0.236842,
+            "count": 38
+          },
+          {
+            "low": 0.2,
+            "high": 0.3,
+            "mean_forecast": 0.246152,
+            "observed": 0.130435,
+            "count": 23
+          },
+          {
+            "low": 0.3,
+            "high": 0.4,
+            "mean_forecast": 0.318841,
+            "observed": 0.181818,
+            "count": 11
+          }
+        ]
+      },
+      {
+        "event": "top10",
+        "label": "Points",
+        "bins": [
+          {
+            "low": 0.2,
+            "high": 0.3,
+            "mean_forecast": 0.24876,
+            "observed": 0.32,
+            "count": 25
+          },
+          {
+            "low": 0.3,
+            "high": 0.4,
+            "mean_forecast": 0.352375,
+            "observed": 0.15,
+            "count": 20
+          },
+          {
+            "low": 0.4,
+            "high": 0.5,
+            "mean_forecast": 0.447417,
+            "observed": 0.533333,
+            "count": 15
+          },
+          {
+            "low": 0.5,
+            "high": 0.6,
+            "mean_forecast": 0.548486,
+            "observed": 0.611111,
+            "count": 18
+          },
+          {
+            "low": 0.6,
+            "high": 0.7,
+            "mean_forecast": 0.654556,
+            "observed": 0.777778,
+            "count": 18
+          },
+          {
+            "low": 0.7,
+            "high": 0.8,
+            "mean_forecast": 0.756975,
+            "observed": 0.7,
+            "count": 20
+          },
+          {
+            "low": 0.8,
+            "high": 0.9,
+            "mean_forecast": 0.807,
+            "observed": 0.5,
+            "count": 4
+          }
+        ]
+      }
+    ]
+  }
+}

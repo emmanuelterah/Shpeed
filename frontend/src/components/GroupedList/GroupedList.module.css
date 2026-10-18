@@ -30,7 +30,8 @@
   padding: var(--space-3) var(--space-4);
   position: relative;
 }
-.row + .row::before {
+.row + .row::before,
+.linkItem + .linkItem > .row::before {
   content: "";
   position: absolute;
   top: 0;
@@ -73,4 +74,16 @@
 .subtitle {
   font: var(--text-footnote);
   color: var(--secondary-label);
+}
+.linkItem > .row {
+  color: inherit;
+  text-decoration: none;
+  transition: background var(--duration-fast) var(--ease-standard);
+}
+.linkItem > .row:hover {
+  background: var(--fill-quaternary);
+}
+.chevron {
+  flex: none;
+  color: var(--tertiary-label);
 }

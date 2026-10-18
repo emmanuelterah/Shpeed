@@ -17,7 +17,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "gen:types": "json2ts -i ../schemas/prediction-record.v1.schema.json -o src/types/prediction.ts --bannerComment \"/* Generated from schemas/prediction-record.v1.schema.json by pnpm gen:types. Do not edit. */\""
+    "gen:types": "json2ts -i ../schemas/prediction-record.v1.schema.json -o src/types/prediction.ts --bannerComment \"/* Generated from schemas/prediction-record.v1.schema.json by pnpm gen:types. Do not edit. */\" && json2ts -i ../schemas/predictions-index.v1.schema.json -o src/types/predictions-index.ts --bannerComment \"/* Generated from schemas/predictions-index.v1.schema.json by pnpm gen:types. Do not edit. */\" && prettier --write src/types"
   },
   "dependencies": {
     "lucide-react": "^0.441.0",
@@ -26,6 +26,7 @@
     "react-router-dom": "^6.26.2"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.10.2",
     "@eslint/js": "^9.12.0",
     "@playwright/test": "^1.48.0",
     "@testing-library/dom": "^10.4.0",

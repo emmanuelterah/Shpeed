@@ -10,7 +10,7 @@ const method = [
   },
   {
     title: "Cutoff after qualifying",
-    subtitle: "Forecasts use only data available before the race and never change once published.",
+    subtitle: "Forecasts use only data from before the race and are locked at lights out.",
   },
   {
     title: "Scored in public",

@@ -49,6 +49,8 @@ dependencies = [
   "httpx>=0.27",
   "filelock>=3.15",
   "pytz>=2024.1",
+  # Prediction records are validated against the shared JSON Schema before publishing (P8-02)
+  "jsonschema>=4.21",
   # Statistical models (Phases 3-6): NumPyro on JAX (ADR-0003) and statsmodels.
   # Core, not an extra: the CLI imports them at the top of cli.py, so a plain
   # `pip install f1sim` must give a working command.
@@ -137,6 +139,12 @@ replacement = '](https://github.com/emmanuelterah/Shpeed/blob/main/\1)'
 [tool.hatch.build.targets.wheel]
 packages = ["src/f1sim"]
 
+# The published-JSON schemas are shared with the frontend (P8-02, P8-13). They are
+# force-included in the wheel so `pip install f1sim` can validate before publishing.
+[tool.hatch.build.targets.wheel.force-include]
+"schemas/prediction-record.v1.schema.json" = "f1sim/resources/prediction-record.v1.schema.json"
+"schemas/predictions-index.v1.schema.json" = "f1sim/resources/predictions-index.v1.schema.json"
+
 [tool.hatch.build.targets.sdist]
 # Ship only what builds and tests the package; the frontend, docs and data stay in the repo
 # Leading slashes anchor each pattern to the repository root
@@ -144,6 +152,7 @@ include = [
   "/src/f1sim",
   "/tests",
   "/typings",
+  "/schemas",
   "/README.md",
   "/LICENSE",
   "/CHANGELOG.md",
@@ -271,6 +280,7 @@ name = "Top-level layers: entry points > adapters > core"
 type = "layers"
 layers = [
   "f1sim.cli",
+  "f1sim.live | f1sim.cli_args",
   "f1sim.api | f1sim.reports",
   "f1sim.adapters",
   "f1sim.core",

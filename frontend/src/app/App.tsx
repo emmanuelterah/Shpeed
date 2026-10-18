@@ -12,6 +12,7 @@ const router = createHashRouter([
     children: [
       { index: true, element: <Navigate to="/race" replace /> },
       { path: "race", element: <RacePage /> },
+      { path: "race/:season/:round", element: <RacePage /> },
       { path: "season", element: <SeasonPage /> },
       { path: "calibration", element: <CalibrationPage /> },
       { path: "about", element: <AboutPage /> },

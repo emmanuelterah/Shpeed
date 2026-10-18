@@ -1,0 +1,45 @@
+.figure {
+  margin: 0;
+}
+.chart {
+  display: block;
+  width: 100%;
+  max-width: 380px;
+  margin: 0 auto;
+  overflow: visible;
+}
+.grid line {
+  stroke: var(--separator);
+  stroke-width: 0.5;
+}
+.tick {
+  font: var(--text-caption2);
+  font-variant-numeric: tabular-nums;
+  fill: var(--secondary-label);
+}
+.axis {
+  font: var(--text-caption1);
+  fill: var(--secondary-label);
+}
+.diagonal {
+  stroke: var(--system-gray);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+}
+.line {
+  fill: none;
+  stroke: var(--tint);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.dot {
+  fill: var(--tint);
+  stroke: var(--grouped-cell);
+  stroke-width: 2;
+}
+.caption {
+  font: var(--text-footnote);
+  color: var(--secondary-label);
+  text-align: center;
+  margin-top: var(--space-2);
+}

@@ -41,7 +41,7 @@
 }
 
 .tabItem:global(.active) {
-  color: var(--tint);
+  color: var(--tint-text);
 }
 
 @media (min-width: 768px) {
@@ -88,7 +88,7 @@
   }
   .sideItem:global(.active) {
     background: var(--fill-tertiary);
-    color: var(--tint);
+    color: var(--tint-text);
     font-weight: 600;
   }
 }
