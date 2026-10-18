@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.12, <3.14"
 resolution-markers = [
     "python_full_version >= '3.13' and sys_platform == 'win32'",
@@ -566,6 +566,7 @@ dependencies = [
     { name = "filelock" },
     { name = "httpx" },
     { name = "jax" },
+    { name = "jsonschema" },
     { name = "numpy" },
     { name = "numpyro" },
     { name = "pandas" },
@@ -624,6 +625,7 @@ requires-dist = [
     { name = "filelock", specifier = ">=3.15" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "jax", specifier = ">=0.5" },
+    { name = "jsonschema", specifier = ">=4.21" },
     { name = "numpy", specifier = ">=2.0,<2.5" },
     { name = "numpyro", specifier = ">=0.18" },
     { name = "pandas", specifier = ">=2.2,<3" },

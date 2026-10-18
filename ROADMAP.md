@@ -223,22 +223,22 @@ the study is `docs/research/regulation-reset-writeup.md`, the numbers
 
 | | ID | Feature | Area | Priority | Done when | Depends on | Principles |
 |---|---|---|---|---|---|---|---|
-| ⬜ | `P8-01` | CLI: predict, backtest, report | Delivery | must | All three commands documented with --help and tested. | P5-12, P2-04 |  |
-| ⬜ | `P8-02` | Versioned prediction record schema | Delivery | must | JSON Schema v1 with provenance: git commit, model version, snapshot ID, data cutoff, seed. | P2-01 | ACID:C |
-| ⬜ | `P8-03` | Atomic, idempotent publishing | Delivery | must | Record written via temp + rename and committed in one git commit; re-running a round yields the same file; a published record is never changed after lights out. | P8-02 | ACID:A, ACID:D, ACID:I |
-| 🚧 | `P8-04` | Read-only FastAPI service | Delivery | must | /predictions/{season}/{round} serves records; contract-tested against the schema. | P8-02 | SOLID:DIP |
+| 🔍 | `P8-01` | CLI: predict, backtest, report | Delivery | must | All three commands documented with --help and tested. | P5-12, P2-04 |  |
+| 🔍 | `P8-02` | Versioned prediction record schema | Delivery | must | JSON Schema v1 with provenance: git commit, model version, snapshot ID, data cutoff, seed. | P2-01 | ACID:C |
+| 🔍 | `P8-03` | Atomic, idempotent publishing | Delivery | must | Record written via temp + rename and committed in one git commit; re-running a round yields the same file; a published record is never changed after lights out. | P8-02 | ACID:A, ACID:D, ACID:I |
+| 🔍 | `P8-04` | Read-only FastAPI service | Delivery | must | /predictions/{season}/{round} serves records; contract-tested against the schema. | P8-02 | SOLID:DIP |
 | 🔍 | `P8-05` | Docker images and Compose stack | Delivery | must | docker compose up --build starts api (:8000) and web (:8080) with health checks; compose.dev.yaml gives hot reload; images are multi-stage, non-root and read-only; CI builds and smoke-tests the stack. | P8-04 |  |
-| ⬜ | `P8-06` | Scheduled post-qualifying run | Delivery | must | Workflow syncs, predicts and publishes after qualifying. | P8-01, P8-03 |  |
-| ⬜ | `P8-07` | Scheduled post-race scoring | Delivery | must | Workflow syncs results, scores the record and updates the scoreboard. | P8-06 |  |
-| ⬜ | `P8-08` | Failure alerting and retries | Observability | must | Failed workflow retries once, then notifies; run logs kept as artifacts. | P8-06 |  |
-| ⬜ | `P8-09` | Race prediction screen | Frontend | must | Race screen shows the latest prediction with Win / Podium / Points views, a provenance footer and accessible probability bars, reading predictions/ JSON. | P8-03, P8-11, P8-12 |  |
-| ⬜ | `P8-10` | Season scoreboard and calibration screens | Frontend | must | Season screen lists scored races; Calibration screen plots predicted vs observed frequency with an equivalent text table. | P8-07, P8-09 |  |
-| ⬜ | `P8-11` | Design system on Apple HIG | Frontend | must | Tokens for type (Dynamic Type scale), semantic colour in light and dark, spacing, materials and motion; primitives (LargeTitle, SegmentedControl, GroupedList, ProbabilityBar, EmptyState, Badge) tested; DESIGN.md current. | P0-18 | SOLID:SRP |
-| ⬜ | `P8-12` | App shell and navigation | Frontend | must | Tab bar on phone widths, sidebar on iPad and Mac widths, safe-area insets respected, hash routing works on GitHub Pages. | P8-11 |  |
-| ⬜ | `P8-13` | Types generated from the shared schema | Frontend | must | pnpm gen:types regenerates src/types/prediction.ts from schemas/prediction-record.v1; CI fails if the committed types are stale. | P8-02, P0-18 | ACID:C |
-| ⬜ | `P8-14` | Frontend deployed to GitHub Pages | Frontend | must | pages.yml builds the app with predictions/ included and deploys on every merge to main. | P8-09 |  |
-| ⬜ | `P8-15` | Accessibility and performance audit | Frontend | must | WCAG AA contrast in both themes, VoiceOver labels checked, full keyboard navigation, Lighthouse accessibility and performance 95+ on mobile. | P8-10 |  |
-| ⬜ | `P8-16` | End-to-end smoke tests | Frontend | should | Playwright runs on desktop Safari and iPhone viewports in CI. | P8-12 |  |
+| 🔍 | `P8-06` | Scheduled post-qualifying run | Delivery | must | Workflow syncs, predicts and publishes after qualifying. | P8-01, P8-03 |  |
+| 🔍 | `P8-07` | Scheduled post-race scoring | Delivery | must | Workflow syncs results, scores the record and updates the scoreboard. | P8-06 |  |
+| 🔍 | `P8-08` | Failure alerting and retries | Observability | must | Failed workflow retries once, then notifies; run logs kept as artifacts. | P8-06 |  |
+| 🔍 | `P8-09` | Race prediction screen | Frontend | must | Race screen shows the latest prediction with Win / Podium / Points views, a provenance footer and accessible probability bars, reading predictions/ JSON. | P8-03, P8-11, P8-12 |  |
+| 🔍 | `P8-10` | Season scoreboard and calibration screens | Frontend | must | Season screen lists scored races; Calibration screen plots predicted vs observed frequency with an equivalent text table. | P8-07, P8-09 |  |
+| 🔍 | `P8-11` | Design system on Apple HIG | Frontend | must | Tokens for type (Dynamic Type scale), semantic colour in light and dark, spacing, materials and motion; primitives (LargeTitle, SegmentedControl, GroupedList, ProbabilityBar, EmptyState, Badge) tested; DESIGN.md current. | P0-18 | SOLID:SRP |
+| 🔍 | `P8-12` | App shell and navigation | Frontend | must | Tab bar on phone widths, sidebar on iPad and Mac widths, safe-area insets respected, hash routing works on GitHub Pages. | P8-11 |  |
+| 🔍 | `P8-13` | Types generated from the shared schema | Frontend | must | pnpm gen:types regenerates src/types/prediction.ts from schemas/prediction-record.v1; CI fails if the committed types are stale. | P8-02, P0-18 | ACID:C |
+| 🔍 | `P8-14` | Frontend deployed to GitHub Pages | Frontend | must | pages.yml builds the app with predictions/ included and deploys on every merge to main. | P8-09 |  |
+| 🔍 | `P8-15` | Accessibility and performance audit | Frontend | must | WCAG AA contrast in both themes, VoiceOver labels checked, full keyboard navigation, Lighthouse accessibility and performance 95+ on mobile. | P8-10 |  |
+| 🔍 | `P8-16` | End-to-end smoke tests | Frontend | should | Playwright runs on desktop Safari and iPhone viewports in CI. | P8-12 |  |
 
 ## Phase 9 — Open-source launch (v1.0)
 

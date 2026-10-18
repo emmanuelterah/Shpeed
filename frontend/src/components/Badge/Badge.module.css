@@ -15,5 +15,5 @@
 }
 .caution {
   background: color-mix(in srgb, var(--system-orange) 18%, transparent);
-  color: var(--system-orange);
+  color: var(--caution-text);
 }

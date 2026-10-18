@@ -23,7 +23,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         settings: Settings to use; None reads them from the environment.
 
     Returns:
-        A FastAPI app with ``/health`` and the ``/predictions`` routes.
+        A FastAPI app with ``/health`` and the ``/predictions`` routes, including
+        ``/predictions/index`` for the scoreboard and calibration.
     """
     cfg = settings or Settings()
     root = cfg.predictions_dir
@@ -57,6 +58,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ``{"season": ..., "round": ...}`` for each record, oldest first.
         """
         return [{"season": s, "round": r} for s, r in map(_season_round, _records())]
+
+    @api.get("/predictions/index")
+    def prediction_index() -> dict[str, Any]:
+        """Return the predictions index: every race, the scoreboard and calibration (P8-10).
+
+        Returns:
+            The contents of ``predictions/index.json``.
+
+        Raises:
+            HTTPException: 404 if nothing is published yet.
+        """
+        path = root / "index.json"
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail="No predictions published yet")
+        return _load(path)
 
     @api.get("/predictions/latest")
     def latest_prediction() -> dict[str, Any]:
