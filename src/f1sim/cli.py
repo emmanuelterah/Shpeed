@@ -8,6 +8,7 @@ without that markup appearing in the terminal.
 
 import json
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
 from math import isfinite
 from pathlib import Path
@@ -26,6 +27,7 @@ from f1sim.adapters.models.pace_checks import predictive_check
 from f1sim.adapters.models.pace_reference import fit_reference, prepare_laps
 from f1sim.adapters.models.pace_training import SamplerSettings, season_observations, train_pace
 from f1sim.adapters.models.registry import ModelOptions, get_model, model_names, pace_context
+from f1sim.adapters.models.simulator import COMPONENTS
 from f1sim.adapters.models.tyres import (
     attach_track_temperature,
     fit_tyre_model,
@@ -43,6 +45,7 @@ from f1sim.core.usecases.backtest import BacktestResult, walk_forward
 from f1sim.core.usecases.readers import FAR_FUTURE
 from f1sim.core.usecases.sync import SyncReport, sync_season
 from f1sim.observability import configure_logging
+from f1sim.reports.ablation import render_ablation, run_ablation
 from f1sim.reports.backtest_report import leaderboard, render_backtest
 from f1sim.reports.data_quality import render_markdown, session_quality
 from f1sim.reports.pit_windows import calibrate_pit_windows, render_pit_windows
@@ -350,8 +353,29 @@ def _model_list(text: str) -> list[str]:
     return names
 
 
+def _components(text: str) -> frozenset[str]:
+    """Parse the ``--ablate`` list into the set of event components to switch off (P6-09).
+
+    Args:
+        text: Comma-separated component names, or empty for none.
+
+    Returns:
+        The components to disable.
+
+    Raises:
+        typer.BadParameter: If a name is not a known event component.
+    """
+    names = {name.strip() for name in text.split(",") if name.strip()}
+    unknown = names - set(COMPONENTS)
+    if unknown:
+        choices = ", ".join(COMPONENTS)
+        bad = ", ".join(sorted(unknown))
+        raise typer.BadParameter(f"unknown component {bad}; choose from {choices}")
+    return frozenset(names)
+
+
 @app.command(help="Walk-forward backtest of registered models, with report and benchmarks.")
-def backtest(
+def backtest(  # pylint: disable=too-many-arguments,too-many-locals
     ctx: typer.Context,
     *,
     model: Annotated[
@@ -363,6 +387,9 @@ def backtest(
     check: Annotated[
         bool, typer.Option(help="Fail if RPS is worse than the best recorded run")
     ] = False,
+    ablate: Annotated[
+        str, typer.Option(help="Comma-separated event components to switch off (P6-09)")
+    ] = "",
     workers: Annotated[int, typer.Option(help="Races forecast in parallel")] = 4,
 ) -> None:
     """Run a walk-forward backtest (P2-04) and report, record or gate it (P2-12 to P2-14).
@@ -374,14 +401,17 @@ def backtest(
         report: File for the Markdown report; None prints the leaderboard only.
         record: Append each model's scores to its benchmark file.
         check: Exit with status 1 if any model regresses against its benchmark.
+        ablate: Comma-separated simulator event components to disable, for the ablation runner.
         workers: Races forecast in parallel.
 
     Raises:
+        BadParameter: If an ablated component is not a known event component.
         typer.Exit: With status 1 when ``check`` finds a regression.
     """
     settings: Settings = ctx.obj["settings"]
     names = _model_list(model)
     years = parse_seasons(seasons)
+    options = replace(_model_options(settings), disabled=_components(ablate))
     store = open_store(settings)
     try:
         snapshot = store.latest_snapshot()
@@ -390,7 +420,7 @@ def backtest(
                 store,
                 snapshot=snapshot,
                 seasons=years,
-                model=get_model(name, _model_options(settings)),
+                model=get_model(name, options),
                 seed=settings.seed,
                 workers=workers,
             )
@@ -769,3 +799,57 @@ def report_score(season: Season, round_: Round) -> None:
         NotImplementedError: Always, until P8-07 is built.
     """
     raise NotImplementedError(f"P8-07: score {season} round {round_}")
+
+
+@report_app.command("ablation", help="Switch each event component off and score the change.")
+def report_ablation(
+    ctx: typer.Context,
+    *,
+    seasons: Annotated[str, typer.Option(help="Seasons, such as 2022-2025")] = "2022-2025",
+    out: Annotated[Path, typer.Option(help="Where to write the Markdown table")] = Path(
+        "docs/ablation.md"
+    ),
+    check: Annotated[
+        bool, typer.Option(help="Exit non-zero if a kept component makes the backtest worse")
+    ] = False,
+    rain: Annotated[
+        float, typer.Option("--rain", help="Rain chance mixed into every run (P6-07)")
+    ] = 0.0,
+    workers: Annotated[int, typer.Option(help="Races forecast in parallel")] = 4,
+) -> None:
+    """Publish the Phase 6 ablation table and, with ``--check``, fail on a harmful component.
+
+    Args:
+        ctx: Typer context holding settings.
+        seasons: Seasons the backtest covers.
+        out: File for the Markdown table.
+        check: Exit with status 1 when a kept component makes the backtest worse.
+        rain: Chance each simulated run is wet, mixed into every configuration.
+        workers: Races forecast in parallel.
+
+    Raises:
+        typer.Exit: With status 1 when ``check`` finds a harmful component.
+    """
+    settings: Settings = ctx.obj["settings"]
+    options = replace(_model_options(settings), p_rain=rain)
+    store = open_store(settings)
+    try:
+        result = run_ablation(
+            store,
+            snapshot=store.latest_snapshot(),
+            seasons=parse_seasons(seasons),
+            seed=settings.seed,
+            options=options,
+            workers=workers,
+        )
+    finally:
+        store.close()
+    markdown = render_ablation(result)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(markdown, encoding="utf-8")
+    typer.echo(markdown)
+    typer.echo(f"Wrote {out}")
+    harmful = result.harmful()
+    if check and harmful:
+        typer.secho(f"Harmful components (drop these): {', '.join(harmful)}", fg=typer.colors.RED)
+        raise typer.Exit(1)

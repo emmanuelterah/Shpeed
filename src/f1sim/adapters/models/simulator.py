@@ -19,6 +19,7 @@ from numpy.typing import NDArray
 
 from f1sim.adapters.config_files import load_season_rules
 from f1sim.adapters.models.common import N_SIMS
+from f1sim.adapters.models.hazards import HazardModel, fit_hazards
 from f1sim.adapters.models.overtaking import OvertakingModel, fit_overtaking
 from f1sim.adapters.models.pace import PaceContext, PacePredictor
 from f1sim.adapters.models.pace_data import circuit_map, event_cluster
@@ -34,9 +35,15 @@ from f1sim.adapters.models.strategy import (
 from f1sim.adapters.models.tyre_priors import default_tyre_model
 from f1sim.adapters.models.tyres import SampledLoss, TyreModel, fit_tyre_model
 from f1sim.adapters.steps.dirty_air import DirtyAirStep
+from f1sim.adapters.steps.lap1 import Lap1Step, launch_fixture
 from f1sim.adapters.steps.lap_time import LapTimeStep
 from f1sim.adapters.steps.overtake import OvertakeStep
+from f1sim.adapters.steps.penalty import PenaltyStep
 from f1sim.adapters.steps.pit_stop import PitStopStep
+from f1sim.adapters.steps.rain import RainStep
+from f1sim.adapters.steps.reliability import ReliabilityStep
+from f1sim.adapters.steps.safety_car import SafetyCarStep
+from f1sim.adapters.steps.traffic import TrafficStep
 from f1sim.core.domain.entities import EventKey, SnapshotId
 from f1sim.core.domain.prediction import PositionMatrix
 from f1sim.core.domain.race import RaceEntry
@@ -83,10 +90,14 @@ to 2021 (0.56 places gained per lap with no stops).
 """
 ORDER_NOISE_JITTER = 1e-9
 """Tiny diagonal added before the Cholesky, so a singular covariance still factorises."""
+PENALTY_SECONDS = (5.0, 10.0)
+"""The two in-race penalty lengths, seconds (P6-06)."""
+COMPONENTS = ("lap1", "safety_car", "reliability", "rain", "traffic", "penalties")
+"""Event components the ablation runner (P6-09) can switch off one at a time."""
 
 
 @dataclass(frozen=True)
-class _Draws:
+class _Draws:  # pylint: disable=too-many-instance-attributes
     """The per-run inputs a race is simulated from.
 
     Attributes:
@@ -96,7 +107,11 @@ class _Draws:
         stops: Stop laps of shape ``(n_sims, n_cars, max_stops)``.
         compounds: Compound code fitted at each stop, same shape.
         pit_loss: Time lost at each stop, same shape as ``stops``, seconds.
-        retired: Which cars retire, of shape ``(n_sims, n_cars)``.
+        retired: Which cars retire before the start, of shape ``(n_sims, n_cars)``.
+        retire_lap: Which lap each car retires on, ``0`` for none (P6-03, P6-04).
+        penalty_lap: Which lap each car is penalised on, ``0`` for none (P6-06).
+        penalty_s: Seconds added on that lap, same shape (P6-06).
+        wet: Which simulations are run in the rain, of shape ``(n_sims,)`` (P6-07).
     """
 
     pace_s: NDArray[np.float64]
@@ -106,6 +121,10 @@ class _Draws:
     compounds: NDArray[np.int_]
     pit_loss: NDArray[np.float64]
     retired: NDArray[np.bool_]
+    retire_lap: NDArray[np.int_]
+    penalty_lap: NDArray[np.int_]
+    penalty_s: NDArray[np.float64]
+    wet: NDArray[np.bool_]
 
 
 @dataclass(frozen=True)
@@ -120,6 +139,8 @@ class SimulatorContext:
         race_noise_pct: Race-day pace noise per car, percent of lap time.
         chooser_temperature_s: Softmax scale of the strategy draw, seconds.
         pass_offset: Log-odds added to every pass attempt.
+        disabled: Event components switched off, by name in ``COMPONENTS`` (P6-09).
+        p_rain: Chance the race is run in the rain; zero keeps ``RainStep`` out (P6-07).
     """
 
     pace: PaceContext
@@ -129,6 +150,8 @@ class SimulatorContext:
     race_noise_pct: float = RACE_NOISE_PCT
     chooser_temperature_s: float = CHOOSER_TEMPERATURE_S
     pass_offset: float = PASS_OFFSET
+    disabled: frozenset[str] = frozenset()
+    p_rain: float = 0.0
 
 
 class SimulatorPredictor:  # pylint: disable=too-many-instance-attributes
@@ -152,10 +175,11 @@ class SimulatorPredictor:  # pylint: disable=too-many-instance-attributes
         self._tyre: TyreModel | None = None
         self._tendencies: TeamTendencies | None = None
         self._overtaking: OvertakingModel | None = None
+        self._hazards: HazardModel | None = None
         self._plan_cache: dict[_PlanKey, StrategyChooser] = {}
 
     def fit(self, reader: DataReader, *, snapshot: SnapshotId, cutoff: datetime) -> None:
-        """Fit the pace, tyre, strategy and pass models up to the cutoff.
+        """Fit the pace, tyre, strategy, pass and event models up to the cutoff.
 
         Args:
             reader: The data store.
@@ -165,6 +189,7 @@ class SimulatorPredictor:  # pylint: disable=too-many-instance-attributes
         self._pace.fit(reader, snapshot=snapshot, cutoff=cutoff)
         laps = reader.read("laps", snapshot=snapshot, as_of=cutoff)
         events = reader.read("events", snapshot=snapshot, as_of=cutoff)
+        results = reader.read("results", snapshot=snapshot, as_of=cutoff)
         pit_stops = reader.read("pit_stops", snapshot=snapshot, as_of=cutoff)
         self._laps = laps
         self._circuits = circuit_map(events)
@@ -175,8 +200,11 @@ class SimulatorPredictor:  # pylint: disable=too-many-instance-attributes
             self._tyre = default_tyre_model()
         self._tendencies = fit_team_tendencies(pit_stops, laps)
         self._overtaking = fit_overtaking(laps, events)
+        self._hazards = fit_hazards(laps, events, results)
 
-    def predict(self, event: EventKey, entries: Sequence[RaceEntry]) -> PositionMatrix:
+    def predict(  # pylint: disable=too-many-locals
+        self, event: EventKey, entries: Sequence[RaceEntry]
+    ) -> PositionMatrix:
         """Simulate the race many times and count the finishing positions.
 
         Args:
@@ -191,6 +219,7 @@ class SimulatorPredictor:  # pylint: disable=too-many-instance-attributes
         """
         tyre = self._require_tyre()
         overtaking = self._require_overtaking()
+        hazards = self._require_hazards()
         circuit = self._circuits.get((event.season, event.round), "")
         rules = load_season_rules(event.season, self._context.rules_dir)
         total = _total_laps(rules, circuit, self._context.circuits)
@@ -204,6 +233,9 @@ class SimulatorPredictor:  # pylint: disable=too-many-instance-attributes
             circuit=circuit,
             tyre=tyre,
         )
+        launch_places = np.array(
+            [hazards.lap1.launch(entry.driver_id) for entry in entries], dtype=np.float64
+        )
         steps = _steps(
             draws.pace_s,
             draws.loss,
@@ -215,6 +247,10 @@ class SimulatorPredictor:  # pylint: disable=too-many-instance-attributes
             overtaking=overtaking,
             circuit=circuit,
             pass_offset=self._context.pass_offset,
+            hazards=hazards,
+            draws=draws,
+            launch_places=launch_places,
+            disabled=self._context.disabled,
         )
         ctx = LapContext(total, tyre.pit_loss_s(circuit), rules.overtake_aid)
         state = starting_state(
@@ -227,7 +263,7 @@ class SimulatorPredictor:  # pylint: disable=too-many-instance-attributes
         drivers = tuple(entry.driver_id for entry in entries)
         return simulate_race(drivers, state, steps, ctx, self._rng)
 
-    def _draws(  # pylint: disable=too-many-arguments
+    def _draws(  # pylint: disable=too-many-arguments,too-many-locals
         self,
         event: EventKey,
         entries: Sequence[RaceEntry],
@@ -244,6 +280,13 @@ class SimulatorPredictor:  # pylint: disable=too-many-instance-attributes
         start, stops, stop_compounds = self._sample_plans(
             entries, rules=rules, total=total, reference=reference, circuit=circuit, loss=loss
         )
+        if "reliability" in self._context.disabled:
+            retired = self._rng.random((n_sims, n)) < self._pace.p_dnf
+            retire_lap = np.zeros((n_sims, n), dtype=np.int64)
+        else:
+            retired = np.zeros((n_sims, n), dtype=bool)
+            retire_lap = self._sample_retire_laps(entries, total=total)
+        penalty_lap, penalty_s = self._sample_penalties(n, total=total)
         return _Draws(
             pace_s=self._sample_pace(event, entries, circuit, reference),
             loss=loss,
@@ -251,8 +294,43 @@ class SimulatorPredictor:  # pylint: disable=too-many-instance-attributes
             stops=stops,
             compounds=stop_compounds,
             pit_loss=self._pit_loss(entries, circuit, n_sims),
-            retired=self._rng.random((n_sims, n)) < self._pace.p_dnf,
+            retired=retired,
+            retire_lap=retire_lap,
+            penalty_lap=penalty_lap,
+            penalty_s=penalty_s,
+            wet=self._rng.random(n_sims) < self._context.p_rain,
         )
+
+    def _sample_retire_laps(self, entries: Sequence[RaceEntry], *, total: int) -> NDArray[np.int_]:
+        """Draw, per run and car, the lap a car leaves the race on, ``0`` for a finish.
+
+        A car that is going to retire is given a uniformly random lap among the race's laps; the
+        per-car probability already carries the team's mechanical and driver's accident hazard
+        (P6-03, P6-04).
+        """
+        hazard = self._require_hazards().retirement
+        n_sims = self._context.n_sims
+        probability = np.array(
+            [hazard.p_retire(entry.team_id, entry.driver_id) for entry in entries],
+            dtype=np.float64,
+        )
+        attempt = self._rng.random((n_sims, len(entries))) < probability[np.newaxis, :]
+        lap = self._rng.integers(1, total + 1, (n_sims, len(entries)))
+        return np.where(attempt, lap, 0).astype(np.int64)
+
+    def _sample_penalties(
+        self, n_cars: int, *, total: int
+    ) -> tuple[NDArray[np.int_], NDArray[np.float64]]:
+        """Draw, per run and car, whether and when a time penalty lands, and its length (P6-06)."""
+        hazard = self._require_hazards().penalty
+        shape = (self._context.n_sims, n_cars)
+        given = self._rng.random(shape) < hazard.per_race
+        heavy = self._rng.random(shape) >= hazard.five_second_share
+        lap = self._rng.integers(1, total + 1, shape)
+        seconds = np.where(heavy, PENALTY_SECONDS[1], PENALTY_SECONDS[0])
+        penalty_lap = np.where(given, lap, 0).astype(np.int64)
+        penalty_s = np.where(given, seconds, 0.0).astype(np.float64)
+        return penalty_lap, penalty_s
 
     def _require_tyre(self) -> TyreModel:
         if self._tyre is None:
@@ -263,6 +341,11 @@ class SimulatorPredictor:  # pylint: disable=too-many-instance-attributes
         if self._overtaking is None:
             raise InvariantError("the simulator must be fitted before it predicts")
         return self._overtaking
+
+    def _require_hazards(self) -> HazardModel:
+        if self._hazards is None:
+            raise InvariantError("the simulator must be fitted before it predicts")
+        return self._hazards
 
     def _sample_pace(
         self, event: EventKey, entries: Sequence[RaceEntry], circuit: str, reference: float
@@ -352,7 +435,7 @@ class SimulatorPredictor:  # pylint: disable=too-many-instance-attributes
         return np.maximum(base + loss, 0.0)
 
 
-def _steps(  # pylint: disable=too-many-arguments
+def _steps(  # pylint: disable=too-many-arguments,too-many-locals
     pace_s: NDArray[np.float64],
     loss: SampledLoss,
     *,
@@ -364,8 +447,23 @@ def _steps(  # pylint: disable=too-many-arguments
     overtaking: OvertakingModel,
     circuit: str,
     pass_offset: float,
+    hazards: HazardModel,
+    draws: _Draws,
+    launch_places: NDArray[np.float64],
+    disabled: frozenset[str],
 ) -> list[LapStep]:
-    return [
+    """Compose the lap pipeline, leaving out any component the run has switched off (P6-09)."""
+    steps: list[LapStep] = []
+    if "safety_car" not in disabled:
+        steps.append(
+            SafetyCarStep(
+                hazards.safety_car,
+                circuit=circuit,
+                total_laps=total,
+                launch=launch_fixture(launch_places),
+            )
+        )
+    steps.append(
         LapTimeStep(
             pace_s,
             loss,
@@ -375,11 +473,22 @@ def _steps(  # pylint: disable=too-many-arguments
             compound_offset_s=np.array(
                 [tyre.compound_offset(name) for name in loss.compounds], dtype=np.float64
             ),
-        ),
-        DirtyAirStep(),
-        PitStopStep(stops, compounds, pit_loss),
-        OvertakeStep(overtaking, circuit=circuit, pass_offset=pass_offset),
-    ]
+        )
+    )
+    if "lap1" not in disabled:
+        steps.append(Lap1Step(launch_places, incident=hazards.lap1.incident))
+    if "reliability" not in disabled:
+        steps.append(ReliabilityStep(draws.retire_lap))
+    if "penalties" not in disabled:
+        steps.append(PenaltyStep(draws.penalty_lap, draws.penalty_s))
+    steps.append(DirtyAirStep())
+    if "traffic" not in disabled:
+        steps.append(TrafficStep())
+    if "rain" not in disabled and bool(draws.wet.any()):
+        steps.append(RainStep(draws.wet))
+    steps.append(PitStopStep(stops, compounds, pit_loss))
+    steps.append(OvertakeStep(overtaking, circuit=circuit, pass_offset=pass_offset))
+    return steps
 
 
 def _plan_arrays(

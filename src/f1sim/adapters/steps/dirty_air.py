@@ -7,7 +7,7 @@ its own step, apart from the pass model, so the ablation runner (P6-09) can swit
 
 import numpy as np
 
-from f1sim.core.domain.race_state import RaceState, ahead_in_order, lap_start_times
+from f1sim.core.domain.race_state import RaceState, following_fraction
 from f1sim.core.errors import InvariantError
 from f1sim.core.ports.lap_step import LapContext
 
@@ -53,14 +53,7 @@ class DirtyAirStep:
             rng: Seeded random generator; unused, the loss is deterministic.
         """
         del ctx, rng
-        start = lap_start_times(state)
-        ahead = ahead_in_order(start)
-        finite = np.isfinite(start)
-        index = np.where(ahead >= 0, ahead, 0)
-        valid = finite & (ahead >= 0) & np.take_along_axis(finite, index, axis=1)
-        known = np.where(finite, start, 0.0)
-        gap = known - np.take_along_axis(known, index, axis=1)
-        fraction = np.clip((self.window_s - gap) / self.window_s, 0.0, 1.0)
-        penalty = np.where(valid, self.penalty_s * fraction, 0.0)
+        penalty = self.penalty_s * following_fraction(state, self.window_s)
+        penalty = np.where(state.neutralised, 0.0, penalty)
         state.race_time_s = state.race_time_s + penalty
         state.lap_time_s = state.lap_time_s + penalty

@@ -17,6 +17,14 @@ from f1sim.core.ports.lap_step import LapContext
 NAME = "pit_stop"
 PLAN_DIMS = 3
 """A stop plan has three axes: simulations, cars and stop index."""
+VSC_PIT_DISCOUNT_S = 4.0
+"""Time a VSC saves on a stop, because the whole field is already slowed, seconds (P6-01)."""
+SC_PIT_DISCOUNT_S = 8.0
+"""Time a full safety car saves on a stop, seconds (P6-01)."""
+VSC_LEVEL = 1
+"""``RaceState.safety_car`` value for a virtual safety car."""
+SAFETY_CAR_LEVEL = 2
+"""``RaceState.safety_car`` value for a full safety car."""
 
 
 class PitStopStep:
@@ -62,9 +70,10 @@ class PitStopStep:
         """
         del ctx, rng
         stopped = np.zeros(state.race_time_s.shape, dtype=bool)
+        discount = self._discount(state)
         for k in range(self.stop_laps.shape[2]):
             stop = (self.stop_laps[:, :, k] == state.lap) & ~state.retired
-            loss = np.where(stop, self.pit_loss_s[:, :, k], 0.0)
+            loss = np.where(stop, np.maximum(self.pit_loss_s[:, :, k] - discount, 0.0), 0.0)
             state.race_time_s = state.race_time_s + loss
             state.lap_time_s = state.lap_time_s + loss
             state.compound = np.where(stop, self.stop_compounds[:, :, k], state.compound)
@@ -72,3 +81,14 @@ class PitStopStep:
             stopped |= stop
         state.pit_this_lap = stopped
         update_order(state)
+
+    def _discount(self, state: RaceState) -> np.ndarray:
+        """Stops cost less behind a safety car or VSC, since the field is already slowed (P6-01)."""
+        if state.safety_car is None:
+            return np.zeros(state.race_time_s.shape, dtype=np.float64)
+        level = np.broadcast_to(state.safety_car[:, np.newaxis], state.race_time_s.shape)
+        return np.where(
+            level >= SAFETY_CAR_LEVEL,
+            SC_PIT_DISCOUNT_S,
+            np.where(level == VSC_LEVEL, VSC_PIT_DISCOUNT_S, 0.0),
+        ).astype(np.float64)

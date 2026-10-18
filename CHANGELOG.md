@@ -69,6 +69,32 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   track-evolution term and the Phase 4 temperature term.
 
 ### Added
+- Phase 6 race events (P6-01 to P6-09), all fitted with shrinkage toward the field priors and
+  switchable off for the ablation gate:
+  - safety car and VSC (P6-01) from the race-lap `track_status` (a lap's concatenated status codes
+    are read as a set, so a lap is neutralised when any digit is a safety-car or VSC code), pooled
+    per circuit, plus the fitted neutralisation length and the red-flag rate (P6-02);
+  - `SafetyCarStep` draws and times each neutralisation: a full safety car bunches the field to
+    `SC_GAP_S` a car and cheapens stops by `SC_PIT_DISCOUNT_S`, a VSC cheapens them by
+    `VSC_PIT_DISCOUNT_S` without bunching, and a red flag gives a free tyre change and a standing
+    restart that reuses the lap-1 launch; `RaceState.safety_car` carries the level and
+    `RaceState.neutralised` lets `DirtyAirStep`, `OvertakeStep` and `PitStopStep` react to it;
+  - team mechanical (P6-03) and driver accident (P6-04) hazards that retire a car mid-race through
+    `ReliabilityStep`, replacing the Phase 5 pre-start DNF draw (kept as the disabled fallback);
+  - a lap-1 model (P6-05): per-driver launch and a first-corner incident rate, in `Lap1Step`;
+  - should-haves: a prior in-race 5/10 s penalty (`PenaltyStep`, P6-06), a rain regime as an input
+    probability mixing wet and dry runs (`RainStep`, P6-07) and a defending time loss for a car
+    under threat (`TrafficStep`, P6-08);
+  - the ablation runner and table (P6-09): `f1sim.reports.ablation.run_ablation` scores the full
+    simulator then each component switched off, `f1sim report ablation` publishes `docs/ablation.md`
+    and `--check` fails when a kept component makes the backtest worse; `ModelOptions.disabled` and
+    `p_rain` reach the simulator's step pipeline;
+  - ADR-0009 (race events).
+- The published ablation (2021–2022, 1000 runs per race) keeps every component by the gate, with
+  one accepted caveat: the safety car's RPS delta is −0.0010, at the edge of the noise band, so it
+  is recorded as a marginal finding rather than a clear loss; every other component sits within
+  ±0.0001. `docs/ablation.md` states the tolerance so the verdict is read in that light.
+- `f1sim backtest --ablate` switches named simulator event components off through `ModelOptions`.
 - Phase 5 race simulator (P5-01 to P5-12), registered as the `simulator` model:
   - vectorised `RaceState` over `(n_sims, n_cars)` with cumulative race time as the source of
     the order and gaps (P5-01), run by the ordered `LapStep` pipeline (P5-02);
