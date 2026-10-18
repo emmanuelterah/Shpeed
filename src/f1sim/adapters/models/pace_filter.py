@@ -31,6 +31,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from f1sim.adapters.models.pace_data import QUALI, SessionObs
+from f1sim.adapters.models.resets import FullHistory, ResetStrategy
 from f1sim.core.domain.lineage import TeamLineage
 from f1sim.core.domain.reference import EngineSuppliers
 from f1sim.core.errors import DataError
@@ -288,6 +289,7 @@ class PaceFilter:
         lineage: TeamLineage,
         suppliers: EngineSuppliers,
         state: PaceState | None = None,
+        reset: ResetStrategy | None = None,
     ) -> None:
         """Start from an empty or saved posterior.
 
@@ -296,12 +298,15 @@ class PaceFilter:
             lineage: Maps constructor IDs to continuing teams.
             suppliers: Power-unit supplier of each team and season.
             state: A saved posterior to continue from; empty when None.
+            reset: Prior-handling strategy at a regulation reset (P7-02); full history
+                when None, which is the Phase 3 behaviour.
         """
         self.hyper = hyper
         self._lineage = lineage
         self._suppliers = suppliers
         self.state = state or PaceState()
         self._index = self.state.index()
+        self._reset = reset or FullHistory()
 
     def advance(self, season: int, round_: int) -> None:
         """Let the latent effects drift up to a new race weekend.
@@ -322,6 +327,7 @@ class PaceFilter:
                 self._add_variance("tq:", h.quali_offset_sd**2)
                 self._add_variance("tc:", h.cluster_sd**2)
                 self._driver_step()
+            self._reset.at_weekend(self.state, season=season, new_season=new_season)
         self.state.last_event = (season, round_)
 
     def update(self, obs: SessionObs) -> Predictive:
@@ -345,7 +351,9 @@ class PaceFilter:
         cov = np.zeros((dim + 1, dim + 1))
         cov[:dim, :dim] = self.state.cov
         cov[dim, dim] = SESSION_LEVEL_SD**2
-        noise = self.hyper.noise_sd(obs.group) ** 2
+        noise = (
+            self.hyper.noise_sd(obs.group) * self._reset.noise_scale(obs.group, obs.season)
+        ) ** 2
         s = h @ cov @ h.T + noise * np.eye(n)
         innovation = obs.values - h @ mean
         predictive = _predictive(

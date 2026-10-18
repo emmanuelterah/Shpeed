@@ -1,0 +1,30 @@
+# Natural experiments for the regulation-reset study (Phase 7, P7-01).
+#
+# Each entry names one regulation reset, the seasons the study reads (pre-reset included) and
+# the level the data is available at. `snapshot` pins the data snapshot a published result used;
+# an entry without one is declared but not yet runnable, because the data is not synced.
+
+experiments:
+  - id: reg-2014
+    name: Hybrid power units
+    level: results
+    seasons: [2013, 2014]
+    reset_season: 2014
+    reset_round: 1
+    notes: Lap timing starts in 2018, so this is results-level only; needs a results sync.
+
+  - id: reg-2022
+    name: Ground-effect cars
+    level: lap
+    seasons: [2021, 2022]
+    reset_season: 2022
+    reset_round: 1
+    snapshot: 10
+
+  - id: reg-2026
+    name: 2026 power units and active aero
+    level: lap
+    seasons: [2025, 2026]
+    reset_season: 2026
+    reset_round: 1
+    notes: Needs 2025 and 2026 laps in the store before it can run.

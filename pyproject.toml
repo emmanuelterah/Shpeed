@@ -97,6 +97,17 @@ dev = [
   "fastapi>=0.115",
   "uvicorn>=0.30",
 ]
+# Research notebook (Phase 7, P7-04): the regulation-reset study executes in CI from a clean
+# environment. Kept out of `dev` so the test suite stays fast and does not need Jupyter.
+research = [
+  "jupyter-client>=8.6",
+  "jupyter-core>=5.7",
+  "nbclient>=0.10",
+  "nbconvert>=7.16",
+  "nbformat>=5.10",
+  "ipykernel>=6.29",
+  "matplotlib>=3.9",
+]
 
 [tool.uv]
 # signalrcore 1.0.2 (used only by FastF1's live-timing client, which Shpeed does not use) pins
@@ -144,6 +155,9 @@ include = [
 line-length = 100
 target-version = "py312"
 src = ["src", "tests", "scripts"]
+# Notebooks are executed research artefacts, not package code; the logic they use lives in the
+# package with tests (notebooks/README.md). CI still executes the notebook (P7-04).
+extend-exclude = ["notebooks"]
 
 [tool.ruff.lint]
 select = [
