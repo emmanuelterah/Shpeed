@@ -30,12 +30,16 @@ class ModelOptions:
         state_store: Where the pace model saves and resumes fitted states.
         rules_dir: Folder holding ``<season>.yaml`` season-rules files, for the simulator.
         n_sims: Simulated races per forecast for the simulator; its default when None.
+        disabled: Simulator event components to switch off, for the ablation runner (P6-09).
+        p_rain: Chance the simulator runs a race in the rain (P6-07); zero for dry.
     """
 
     pace_hyper: PaceHyper | None = None
     state_store: FittedStateStore | None = None
     rules_dir: Path | None = None
     n_sims: int | None = None
+    disabled: frozenset[str] = frozenset()
+    p_rain: float = 0.0
 
 
 def pace_context(options: ModelOptions) -> PaceContext:
@@ -96,6 +100,8 @@ def simulator_context(options: ModelOptions) -> SimulatorContext:
         circuits=load_circuits(),
         rules_dir=options.rules_dir,
         n_sims=options.n_sims if options.n_sims is not None else N_SIMS,
+        disabled=options.disabled,
+        p_rain=options.p_rain,
     )
 
 
