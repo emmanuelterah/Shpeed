@@ -28,7 +28,7 @@ export function AboutPage() {
         ))}
       </GroupedList>
       <GroupedList footer="Shpeed is an unofficial project and is not affiliated with Formula 1.">
-        <ListRow title="Source code" trailing="MIT" />
+        <ListRow title="Source code" trailing="Apache-2.0" />
       </GroupedList>
     </>
   );

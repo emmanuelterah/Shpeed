@@ -2,7 +2,7 @@
 name = "f1sim"
 dynamic = ["version", "readme"]
 description = "Shpeed: an open-source, lap-by-lap Monte Carlo F1 race simulator"
-license = "MIT"
+license = "Apache-2.0"
 license-files = ["LICENSE"]
 requires-python = ">=3.12,<3.14"
 authors = [{ name = "Shpeed contributors" }]
