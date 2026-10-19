@@ -362,6 +362,6 @@ Yes. See [Option 2: Run locally](#option-2-run-locally).
 
 ## Licence and acknowledgements
 
-Shpeed is released under the [MIT Licence](LICENSE).
+Shpeed is released under the [Apache License, Version 2.0](LICENSE).
 
 It builds on the work of the [FastF1](https://github.com/theOehrly/Fast-F1) and [Jolpica-F1](https://github.com/jolpica/jolpica-f1) projects, without which public F1 data analysis would not be possible.
