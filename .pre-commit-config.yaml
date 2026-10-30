@@ -47,3 +47,8 @@ repos:
         name: block files over 500 kB
         entry: python scripts/check_large_files.py
         language: system
+  # Blocks a commit that contains a credential (API key, token, private key, ...)
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
