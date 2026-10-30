@@ -32,5 +32,7 @@ USER shpeed
 EXPOSE 8000
 HEALTHCHECK --interval=15s --timeout=3s --start-period=5s --retries=3 \
   CMD ["python", "-m", "f1sim.api.healthcheck"]
-CMD ["uvicorn", "f1sim.api.app:app", "--host", "0.0.0.0", "--port", "8000", \
-     "--proxy-headers", "--forwarded-allow-ips", "*"]
+# Forwarded headers are trusted only from the addresses in FORWARDED_ALLOW_IPS (uvicorn's
+# default is 127.0.0.1). Never "*": the API port can be reached without the proxy, and any
+# client could then spoof X-Forwarded-For and X-Forwarded-Proto.
+CMD ["uvicorn", "f1sim.api.app:app", "--host", "0.0.0.0", "--port", "8000"]

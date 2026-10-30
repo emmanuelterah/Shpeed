@@ -30,22 +30,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3.2.4
       - run: uv sync --all-extras
 
       # P5-11: 10,000 runs of one race must stay under a minute; the timing is kept so a
       # slowdown shows up across PRs.
       - name: Engine performance benchmark
         run: uv run --frozen pytest tests/perf -m perf --no-cov --benchmark-json=perf.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: engine-benchmark
           path: perf.json
 
       - name: Restore the local data store
         id: data
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: data
           key: f1sim-data-${{ env.SEASONS }}-${{ hashFiles('uv.lock') }}
