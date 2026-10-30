@@ -5,6 +5,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Security
+- Dependencies with known advisories upgraded so `pip-audit` and `pnpm audit` pass again:
+  filelock 4.2.4 (and `filelock>=4.2.1` as the floor), certifi 2026.10.23, pillow 13.0.0,
+  tornado 6.6 and virtualenv 21.15.1; in the frontend vite 6.4, vitest 4.1, esbuild 0.25
+  and react-router-dom 7.18.
+- Every GitHub Action is pinned to a full commit SHA (with its version in a comment), so a
+  moved or hijacked tag cannot change what runs with write access; Dependabot keeps the pins
+  current.
+- Least-privilege workflow permissions: only the Pages deploy job can write to Pages or mint
+  an OIDC token, the release workflow denies everything by default, and the race-weekend
+  workflow passes `github.ref_name` through an environment variable instead of expanding it
+  inside a shell command.
+- Secret scanning: a gitleaks job in CI over the full history and a gitleaks pre-commit hook.
+- The Docker stack publishes ports on 127.0.0.1 only, so neither the API nor the Vite dev
+  server is reachable from the local network, and the API no longer trusts forwarded headers
+  from any address (`--forwarded-allow-ips "*"` removed).
+
 ### Added
 - Delivery (Phase 8). `f1sim predict` forecasts one race (`--round`) or the newest weekend
   past qualifying (`--latest`) and publishes its prediction record; `f1sim report score`

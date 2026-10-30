@@ -4,6 +4,9 @@
 #     web:  http://localhost:8080        (frontend; /api is proxied to the API)
 #     api:  http://localhost:8000/docs   (interactive API docs)
 #
+# Ports are published on 127.0.0.1 only, so the stack (and the dev server in
+# compose.dev.yaml) is reachable from this machine but not from the rest of the network.
+#
 # Development with hot reload: see compose.dev.yaml.
 
 name: shpeed
@@ -21,7 +24,7 @@ services:
       # Published records are read live from the repo; the API never writes (read-only mount)
       - ./predictions:/app/predictions:ro
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     read_only: true
     tmpfs:
       - /tmp
@@ -42,7 +45,7 @@ services:
         VITE_API_URL: /api
     image: shpeed-web:local
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     read_only: true
     tmpfs:
       - /tmp
