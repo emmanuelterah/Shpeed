@@ -4,13 +4,17 @@
 #   dev:               editable install for `uvicorn --reload` with ./src mounted
 
 FROM python:3.12-slim AS build
-COPY --from=ghcr.io/astral-sh/uv:0.5.4 /uv /usr/local/bin/uv
-ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
+# uv must be new enough to read uv.lock (revision 3, written by uv 0.11+); 0.5.x cannot
+COPY --from=ghcr.io/astral-sh/uv:0.13.4 /uv /usr/local/bin/uv
+# UV_HTTP_TIMEOUT: large wheels (jax, numpy, scipy) can take minutes on a slow connection
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never UV_HTTP_TIMEOUT=300
 WORKDIR /app
 # Dependencies first, so code changes don't invalidate this layer
 COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --frozen --no-dev --extra api --no-install-project
 COPY src ./src
+# The wheel bundles the JSON Schemas (pyproject: tool.hatch...force-include)
+COPY schemas ./schemas
 RUN uv sync --frozen --no-dev --extra api --no-editable
 
 FROM build AS dev

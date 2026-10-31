@@ -6,6 +6,10 @@
 #
 # Ports are published on 127.0.0.1 only, so the stack (and the dev server in
 # compose.dev.yaml) is reachable from this machine but not from the rest of the network.
+# If a port is taken or reserved (common on Windows), pick another on the host side:
+#   SHPEED_WEB_PORT=8081 SHPEED_API_PORT=8001 docker compose up --build
+# To click through the app with the sample forecasts used by the e2e tests:
+#   SHPEED_PREDICTIONS=./frontend/e2e/fixtures/predictions docker compose up
 #
 # Development with hot reload: see compose.dev.yaml.
 
@@ -22,9 +26,9 @@ services:
       F1SIM_LOG_LEVEL: INFO
     volumes:
       # Published records are read live from the repo; the API never writes (read-only mount)
-      - ./predictions:/app/predictions:ro
+      - ${SHPEED_PREDICTIONS:-./predictions}:/app/predictions:ro
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:${SHPEED_API_PORT:-8000}:8000"
     read_only: true
     tmpfs:
       - /tmp
@@ -45,7 +49,7 @@ services:
         VITE_API_URL: /api
     image: shpeed-web:local
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:${SHPEED_WEB_PORT:-8080}:8080"
     read_only: true
     tmpfs:
       - /tmp

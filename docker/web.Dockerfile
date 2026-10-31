@@ -4,6 +4,10 @@
 #   dev:               Vite dev server with hot reload and ./frontend mounted
 
 FROM node:20-alpine AS deps
+# Node 20 gives each connection attempt only 250 ms before trying the next address, which
+# fails every download on a high-latency link (and Docker networks rarely have IPv6). Try
+# IPv4 first and allow each attempt 3 s.
+ENV NODE_OPTIONS="--dns-result-order=ipv4first --network-family-autoselection-attempt-timeout=3000"
 WORKDIR /app
 RUN corepack enable
 COPY frontend/package.json frontend/pnpm-lock.yaml ./
